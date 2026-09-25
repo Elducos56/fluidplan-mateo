@@ -6,7 +6,7 @@ import { glossaryMatcher } from "./glossary.js";
 import { renderApp } from "./layout.js";
 import { setMdLang } from "./md.js";
 import { Store } from "./store.js";
-import { loadExtensions } from "./visuals/index.js";
+import { loadExtensions, validateExtensionVisuals } from "./visuals/index.js";
 
 const localKey = (planId, round) => `fluidplan:${location.port}:${planId}:${round}:answers`;
 
@@ -84,6 +84,7 @@ async function boot() {
   const extensionProblems = await loadExtensions(plan, planId);
   check.warnings.push(...extensionProblems);
   for (const problem of extensionProblems) console.warn(problem);
+  check.errors.push(...validateExtensionVisuals(plan));
 
   const key = localKey(planId, state.round);
   let ui = null;

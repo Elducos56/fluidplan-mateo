@@ -1,7 +1,9 @@
 // fluidplan — local server, no dependencies (Node 20+). Serves the page and the project's plans,
 // saves answers as they come in, freezes rounds and writes PLAN.md / DECISIONS.md. Listens on
 // 127.0.0.1 only and rejects any foreign Host header (DNS rebinding): nothing leaves the machine.
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import { readFile, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -37,8 +39,11 @@ const MIME = {
   ".woff2": "font/woff2",
 };
 
+// Kept in the system temp folder, never in the project: it holds absolute local paths, which must
+// not end up in a repository that versions its plans.
 export function serverInfoPath(config) {
-  return path.join(config.plansDir, ".server.json");
+  const key = createHash("sha256").update(config.plansDir.toLowerCase()).digest("hex").slice(0, 16);
+  return path.join(os.tmpdir(), "fluidplan", `server-${key}.json`);
 }
 
 // Starts the server; tries the next ports if the first one is taken. Resolves { server, port, url }.
@@ -184,8 +189,8 @@ export async function startServer(config, { plan: defaultPlan, quiet = false, re
   }
 
   const url = `http://${HOST}:${port}/${defaultPlan ? `?plan=${encodeURIComponent(defaultPlan)}` : ""}`;
-  if (register && existsSync(config.plansDir)) {
-    await writeJson(serverInfoPath(config),{ port, pid: process.pid, root: config.root, plansDir: config.plansDir, started_at: new Date().toISOString() });
+  if (register) {
+    await writeJson(serverInfoPath(config), { port, pid: process.pid, root: config.root, plansDir: config.plansDir, started_at: new Date().toISOString() });
   }
   const cleanup = async () => {
     try {

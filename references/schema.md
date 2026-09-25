@@ -15,7 +15,7 @@ also enforces the rules that matter (references, cycles, files). Keys are in Eng
 | `accent` | | main color: `neutral` (default), `blue`, `green`, `orange`, `rose`, `violet`, `yellow` |
 | `source` | | `{ "kind": "md" \| "txt" \| "docx" \| "pdf" \| "request", "path": "docs/X.md" }` |
 | `context` | recommended | the request, the scope, what already exists (home page, top of the outputs) |
-| `output` | | `{ "plan": "docs/PLAN_x.md", "decisions": "docs/DECISIONS_x.md" }` (default: the plan folder) |
+| `output` | | `{ "plan": "docs/PLAN_x.md", "decisions": "docs/DECISIONS_x.md" }` (default: the plan folder); an existing file that fluidplan did not write is never overwritten |
 | `phases` | | `[{ id, title, short?, estimate?, cost?, days? }]` |
 | `glossary` | | `[{ term, aliases?, definition }]` |
 | `extensions` | | `["visuals/<name>.js"]`: plan-specific visuals (see `visuals.md`) |

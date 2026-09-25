@@ -52,15 +52,40 @@ export function renderVisual(visual, ctx) {
   }
 }
 
+const EXTENSION_KINDS = new Set();
+
 export async function loadExtensions(plan, planId) {
   const problems = [];
   for (const relative of plan.extensions ?? []) {
     try {
       const mod = await import(`/plans/${encodeURIComponent(planId)}/${relative}?v=${Date.now()}`);
-      for (const def of [mod.default ?? []].flat()) registerVisual(def);
+      for (const def of [mod.default ?? []].flat()) {
+        registerVisual(def);
+        EXTENSION_KINDS.add(def.kind);
+      }
     } catch (error) {
       problems.push(`extension ${relative}: ${error.message}`);
     }
   }
   return problems;
+}
+
+// An extension's own `validate` runs here, in the browser: the engine never executes a plan's code
+// in Node. Its messages count as plan errors, like those of `fluidplan check`.
+export function validateExtensionVisuals(plan) {
+  const errors = [];
+  const visit = (where, visual) => {
+    const def = visual && EXTENSION_KINDS.has(visual.kind) ? REGISTRY.get(visual.kind) : null;
+    if (typeof def?.validate !== "function") return;
+    try {
+      for (const message of def.validate(visual, plan) ?? []) errors.push(`${where}: ${message}`);
+    } catch (error) {
+      errors.push(`${where}: the check of the "${visual.kind}" extension failed (${error.message})`);
+    }
+  };
+  for (const page of plan.pages ?? []) {
+    visit(`page ${page.id}`, page.visual);
+    for (const decision of page.decisions ?? []) visit(`decision ${decision.id}`, decision.visual);
+  }
+  return errors;
 }

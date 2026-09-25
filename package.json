@@ -1,6 +1,6 @@
 {
   "name": "fluidplan",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "A Claude Code skill that turns a plan into a small local web app: settle each decision, let Claude revise round after round, get a PLAN.md ready to execute.",
   "keywords": [

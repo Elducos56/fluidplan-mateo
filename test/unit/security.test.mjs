@@ -1,0 +1,104 @@
+// Security guarantees: a plan's code never runs in Node, no local path is written into the
+// project, a .docx cannot blow up memory, and exports never overwrite a file fluidplan did not write.
+import assert from "node:assert/strict";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { deflateRawSync } from "node:zlib";
+import { checkPlan } from "../../engine/lib/check.mjs";
+import { resolveConfig } from "../../engine/lib/config.mjs";
+import { readZip } from "../../engine/lib/import/docx.mjs";
+import { writeOutputs } from "../../engine/lib/outputs.mjs";
+import { serverInfoPath } from "../../engine/server.mjs";
+
+const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fixtures/plans/mini");
+let root;
+let config;
+before(() => {
+  root = mkdtempSync(path.join(os.tmpdir(), "fluidplan-security-"));
+  cpSync(FIXTURE, path.join(root, ".fluidplan", "mini"), { recursive: true });
+  config = resolveConfig({ root });
+});
+after(() => rmSync(root, { recursive: true, force: true }));
+
+test("a plan's extension is never executed in Node, its kind is still known", async () => {
+  const dir = path.join(root, ".fluidplan", "mini");
+  const marker = path.join(root, "executed.txt");
+  writeFileSync(path.join(dir, "visuals", "evil.js"), [
+    'import { writeFileSync } from "node:fs";',
+    `writeFileSync(${JSON.stringify(marker)}, "executed");`,
+    'export default { kind: "evil_chart", render() {} };',
+  ].join("\n"));
+  const planFile = path.join(dir, "plan.json");
+  const plan = JSON.parse(readFileSync(planFile, "utf8"));
+  plan.extensions.push("visuals/evil.js");
+  plan.pages[1].visual = { kind: "evil_chart" };
+  writeFileSync(planFile, JSON.stringify(plan, null, 2));
+  const { errors } = await checkPlan(config, "mini");
+  assert.equal(existsSync(marker), false, "the extension code did not run");
+  assert.ok(!errors.some((e) => e.includes("evil_chart")), "the kind was read from the source");
+});
+
+test("the server info file lives outside the project", () => {
+  const file = serverInfoPath(config);
+  assert.ok(!file.startsWith(root), file);
+  assert.ok(file.startsWith(os.tmpdir()), file);
+});
+
+// A zip with one deflated entry, enough to test the decompression limits.
+function zipOf(name, data) {
+  const packed = deflateRawSync(data);
+  const nameBytes = Buffer.from(name);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(packed.length, 18);
+  local.writeUInt32LE(data.length, 22);
+  local.writeUInt16LE(nameBytes.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(packed.length, 20);
+  central.writeUInt32LE(data.length, 24);
+  central.writeUInt16LE(nameBytes.length, 28);
+  const body = Buffer.concat([local, nameBytes, packed]);
+  const directory = Buffer.concat([central, nameBytes]);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(body.length, 16);
+  return Buffer.concat([body, directory, end]);
+}
+
+test("a zip bomb is stopped at the decompression limit", () => {
+  const bomb = zipOf("word/document.xml", Buffer.alloc(1024 * 1024));
+  const warnings = [];
+  const files = readZip(bomb, { warnings, limits: { inputBytes: 1e9, entryBytes: 64 * 1024, totalBytes: 1e9 } });
+  assert.equal(files.size, 0);
+  assert.match(warnings[0], /larger than/);
+  assert.equal(readZip(bomb).get("word/document.xml").length, 1024 * 1024, "within the default limits");
+});
+
+test("exports never overwrite a file fluidplan did not write", async () => {
+  const planFile = path.join(root, ".fluidplan", "mini", "plan.json");
+  const plan = JSON.parse(readFileSync(planFile, "utf8"));
+  plan.output = { plan: "README.md", decisions: "docs/DECISIONS.md" };
+  writeFileSync(planFile, JSON.stringify(plan, null, 2));
+  writeFileSync(path.join(root, "README.md"), "# My project\n");
+  await assert.rejects(() => writeOutputs(config, "mini"), (error) => error.status === 409 && /README\.md/.test(error.message));
+  assert.equal(readFileSync(path.join(root, "README.md"), "utf8"), "# My project\n");
+  assert.equal(existsSync(path.join(root, "docs", "DECISIONS.md")), false, "nothing half written");
+
+  rmSync(path.join(root, "README.md"));
+  mkdirSync(path.join(root, "docs"), { recursive: true });
+  await writeOutputs(config, "mini");
+  await writeOutputs(config, "mini");
+  assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /^<!-- generated by fluidplan/);
+});

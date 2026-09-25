@@ -1,24 +1,29 @@
 // Home-grown .docx reader, no dependencies: a .docx is a zip of XML files (Office Open XML).
 // The goal is to give Claude Markdown that is faithful to the document's *structure* (headings,
 // lists, tables, links, images) so it can cut it into a plan; reproducing the layout is not a goal.
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
+
+// A crafted .docx can decompress to gigabytes (a zip bomb): every entry and the whole archive are
+// capped once decompressed, and so is the file read from disk.
+export const LIMITS = { inputBytes: 100 * 1024 * 1024, entryBytes: 64 * 1024 * 1024, totalBytes: 256 * 1024 * 1024 };
+const MB = (bytes) => `${Math.round(bytes / 1024 / 1024)} MB`;
 
 // ---------------------------------------------------------------------------------------------
 // API
 
 // Reads a .docx (path or Buffer) and returns { markdown, media: [{ name, bytes }], warnings }.
 // With outDir: writes outDir/source.md and outDir/<mediaDir>/<name>, and also returns { mdPath, mediaPaths }.
-export async function importDocx(file, { outDir, mediaDir = "media" } = {}) {
-  const { buffer, label } = await loadInput(file);
+export async function importDocx(file, { outDir, mediaDir = "media", limits = LIMITS } = {}) {
+  const { buffer, label } = await loadInput(file, limits);
   if (buffer.length >= 8 && buffer.readUInt32BE(0) === 0xd0cf11e0 && buffer.readUInt32BE(4) === 0xa1b11ae1) {
     // OLE container: what Word 97-2003 produces, and what Word produces for an encrypted .docx.
     throw new Error(`${label} is an old Word document (.doc) or a password-protected .docx: open it in Word and save it as a .docx without a password.`);
   }
   let zip;
   try {
-    zip = openZip(buffer);
+    zip = openZip(buffer, limits);
   } catch (err) {
     throw new Error(`${label} is not a readable .docx. ${err.message}`);
   }
@@ -91,8 +96,8 @@ export async function importDocx(file, { outDir, mediaDir = "media" } = {}) {
 
 // Minimal zip: central directory, stored (0) or deflated (8) entries. Returns a Map name → Buffer.
 // An unreadable entry is skipped (with a warning in `warnings` if given) rather than losing everything.
-export function readZip(buffer, { warnings } = {}) {
-  const zip = openZip(buffer);
+export function readZip(buffer, { warnings, limits = LIMITS } = {}) {
+  const zip = openZip(buffer, limits);
   const files = new Map();
   for (const name of zip.names) {
     try {
@@ -115,14 +120,17 @@ export function documentToMarkdown(documentXml, { stylesXml, numberingXml, relsX
 // ---------------------------------------------------------------------------------------------
 // Input and zip
 
-async function loadInput(file) {
+async function loadInput(file, limits = LIMITS) {
   if (Buffer.isBuffer(file)) return { buffer: file, label: "The document" };
   if (ArrayBuffer.isView(file)) return { buffer: Buffer.from(file.buffer, file.byteOffset, file.byteLength), label: "The document" };
   if (file instanceof ArrayBuffer) return { buffer: Buffer.from(file), label: "The document" };
   const label = `"${path.basename(String(file instanceof URL ? file.pathname : file))}"`;
   try {
+    const size = (await stat(file)).size;
+    if (size > limits.inputBytes) throw Object.assign(new Error(`${label} is too large (${MB(size)}, ${MB(limits.inputBytes)} at most).`), { code: "TOO_LARGE" });
     return { buffer: await readFile(file), label };
   } catch (err) {
+    if (err.code === "TOO_LARGE") throw err;
     if (err.code === "ENOENT") throw new Error(`File not found: ${file}`);
     if (err.code === "EISDIR") throw new Error(`${file} is a folder, not a .docx file.`);
     throw new Error(`Cannot read ${file}: ${err.message}`);
@@ -136,7 +144,7 @@ const SIG_END64 = 0x06064b50;
 const SIG_END64_LOCATOR = 0x07064b50;
 const U32_MAX = 0xffffffff;
 
-function openZip(input) {
+function openZip(input, limits = LIMITS) {
   const buf = toBuffer(input);
   const end = findEndOfCentralDirectory(buf);
   if (end === -1) {
@@ -162,13 +170,18 @@ function openZip(input) {
       return undefined;
     }
   };
+  let decompressed = 0;
   return {
     names: [...entries.keys()],
     find,
     read(name) {
       const entry = entries.get(find(name));
       if (!entry) throw new Error(`missing entry: ${name}`);
-      return extract(buf, entry);
+      const budget = Math.min(limits.entryBytes, limits.totalBytes - decompressed);
+      if (budget <= 0) throw new Error(`archive larger than ${MB(limits.totalBytes)} once decompressed`);
+      const out = extract(buf, entry, budget);
+      decompressed += out.length;
+      return out;
     },
   };
 }
@@ -244,7 +257,7 @@ function toSafeNumber(big) {
   return Number(big);
 }
 
-function extract(buf, entry) {
+function extract(buf, entry, limit) {
   if (entry.flags & 1) throw new Error("encrypted entry");
   const p = entry.local;
   if (p + 30 > buf.length || buf.readUInt32LE(p) !== SIG_LOCAL) throw new Error("local header not found");
@@ -253,11 +266,15 @@ function extract(buf, entry) {
   const stop = start + entry.csize;
   if (stop > buf.length) throw new Error("truncated data");
   const data = buf.subarray(start, stop);
-  if (entry.method === 0) return Buffer.from(data);
+  if (entry.method === 0) {
+    if (data.length > limit) throw new Error(`entry larger than ${MB(limit)}`);
+    return Buffer.from(data);
+  }
   if (entry.method === 8) {
     try {
-      return inflateRawSync(data);
+      return inflateRawSync(data, { maxOutputLength: limit });
     } catch (err) {
+      if (err.code === "ERR_BUFFER_TOO_LARGE" || err instanceof RangeError) throw new Error(`entry larger than ${MB(limit)} once decompressed`);
       throw new Error(`decompression failed (${err.message})`);
     }
   }

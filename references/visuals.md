@@ -64,8 +64,9 @@ calendar), write a module in `.fluidplan/<id>/visuals/<name>.js` and declare it:
 `"extensions": ["visuals/<name>.js"]`.
 
 ```js
-// An ES module, with no imports: everything comes through `ctx`. Nothing may touch the DOM at load
-// time (`fluidplan check` imports it in Node to read `kind` and `validate`).
+// An ES module, with no imports: everything comes through `ctx`. It runs only in the page: the
+// engine never executes a plan's code in Node. `fluidplan check` reads `kind` from the source text,
+// and `validate` runs in the browser, its messages shown as plan errors in the page banner.
 export default {
   kind: "my_curve",
   css: `.x-curve { display: grid; gap: .75rem; } .x-curve path { stroke: var(--chart-1); }`,

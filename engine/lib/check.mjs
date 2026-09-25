@@ -1,40 +1,32 @@
-// Full check of a plan: v2 validation + visual extensions loaded in Node (their kinds, and their
-// optional `validate`). An extension must not touch the DOM when it loads.
+// Full check of a plan: v2 validation, plus the built-in visuals that can check their own data.
+//
+// A plan's visual extensions are code that comes with the plan, possibly from a repository you do
+// not control: Node never runs them. Their kinds are read from the source text, and their optional
+// `validate` runs in the page, inside the browser sandbox (see public/js/visuals/index.js).
 import { existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { loadPlan, planFiles } from "./plans.mjs";
 import { validatePlan } from "./validate.mjs";
 
-export async function loadExtensionsNode(plan, dir) {
+// `kind: "name"` in the module source, without executing it.
+const KIND = /\bkind\s*:\s*["'`]([A-Za-z][\w-]*)["'`]/g;
+
+export async function readExtensionKinds(plan, dir) {
   const kinds = [];
-  const validators = new Map();
   const problems = [];
   for (const relative of plan.extensions ?? []) {
     const file = path.join(dir, relative);
     if (!existsSync(file)) continue;
-    try {
-      // The query parameter bypasses the module cache: a modified extension is read again.
-      const version = (await stat(file)).mtimeMs;
-      const mod = await import(`${pathToFileURL(file).href}?v=${version}`);
-      const defs = [mod.default ?? []].flat();
-      for (const def of defs) {
-        if (!def?.kind || typeof def.render !== "function") {
-          problems.push(`extension ${relative}: each visual exports { kind, render }`);
-          continue;
-        }
-        kinds.push(def.kind);
-        if (typeof def.validate === "function") validators.set(def.kind, def.validate);
-      }
-    } catch (error) {
-      problems.push(`extension ${relative} cannot be loaded in Node (${error.message})`);
-    }
+    const source = await readFile(file, "utf8");
+    const found = [...source.matchAll(KIND)].map((match) => match[1]);
+    if (!found.length) problems.push(`extension ${relative}: no \`kind: "…"\` found in the source`);
+    kinds.push(...found);
   }
-  return { kinds, validators, problems };
+  return { kinds, problems };
 }
 
-// Built-in visuals that can check their own data (modules that do not touch the DOM on load).
+// Built-in visuals that can check their own data: engine code, safe to run.
 async function builtinValidators() {
   const out = new Map();
   for (const name of ["risk_matrix", "diagram"]) {
@@ -47,8 +39,8 @@ async function builtinValidators() {
 export async function checkPlan(config, id) {
   const plan = await loadPlan(config, id);
   const dir = planFiles(config, id).dir;
-  const { kinds, validators: extensionValidators, problems } = await loadExtensionsNode(plan, dir);
-  const validators = new Map([...(await builtinValidators()), ...extensionValidators]);
+  const { kinds, problems } = await readExtensionKinds(plan, dir);
+  const validators = await builtinValidators();
   const result = validatePlan(plan, { planDir: dir, root: config.root, visualKinds: kinds, looseVisuals: problems.length > 0 });
   result.warnings.push(...problems);
   const visuals = [];
@@ -62,7 +54,7 @@ export async function checkPlan(config, id) {
     try {
       for (const message of validate(visual, plan) ?? []) result.errors.push(`${where}: ${message}`);
     } catch (error) {
-      result.warnings.push(`${where}: the check of the "${visual.kind}" extension failed (${error.message})`);
+      result.warnings.push(`${where}: the check of the "${visual.kind}" visual failed (${error.message})`);
     }
   }
   return { plan, ...result };

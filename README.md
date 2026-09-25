@@ -217,7 +217,12 @@ it.
 - The server listens on `127.0.0.1` only, and rejects foreign `Host` headers (DNS rebinding) and
   cross-origin writes.
 - It serves only a plan's `assets/` and `visuals/` folders, and writes only `.md` files inside the
-  project.
+  project. An existing file that fluidplan did not write (a README, say) is never overwritten.
+- A plan's visual extensions run only in the browser page, never in Node: presenting a plan that
+  comes from someone else's repository does not execute its code on your machine.
+- The server's own bookkeeping (port, process, paths) lives in the system temp folder, not in the
+  project, so versioning `.fluidplan/` publishes no local path.
+- The `.docx` reader caps the file size and the decompressed size of each entry (no zip bombs).
 - Illustration keys stay on the server side: the page only learns whether a service is configured.
 
 ### Repository layout
