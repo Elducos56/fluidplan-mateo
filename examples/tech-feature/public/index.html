@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tasklet</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    header { display: flex; justify-content: space-between; align-items: baseline; }
+    form { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    form input[name="title"] { flex: 1; }
+    ul { list-style: none; padding: 0; }
+    li { display: flex; gap: .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid #ddd; }
+    li time { margin-left: auto; color: #666; font-size: .875rem; }
+    li.late time { color: #b42318; font-weight: 600; }
+    li.done { color: #888; text-decoration: line-through; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Tasklet</h1>
+    <span id="user-name"></span>
+  </header>
+  <main>
+    <form id="new-task">
+      <input name="title" placeholder="New task" required maxlength="200">
+      <input name="dueDate" type="date">
+      <button>Add</button>
+    </form>
+    <ul id="tasks"></ul>
+  </main>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+{
+  "version": 2,
+  "id": "mini",
+  "title": "Session cache",
+  "subtitle": "Test plan",
+  "lang": "en",
+  "accent": "neutral",
+  "source": { "kind": "request" },
+  "context": "Cache API sessions to handle the load. The TTL must stay short.",
+  "phases": [
+    { "id": "p1", "title": "Foundation", "short": "Foundation", "estimate": "≈ 1 d", "days": 1 },
+    { "id": "p2", "title": "Interface", "short": "Interface", "estimate": "≈ 2 d", "days": 2 }
+  ],
+  "glossary": [
+    { "term": "TTL", "aliases": ["time to live"], "definition": "How long a cache entry lives before it expires." }
+  ],
+  "extensions": ["visuals/load_curve.js"],
+  "pages": [
+    {
+      "id": "storage",
+      "section": "1 · Storage",
+      "title": "Where sessions live",
+      "intro": "The storage choice drives everything else.",
+      "visual": { "kind": "timeline" },
+      "decisions": [
+        {
+          "id": "D1",
+          "title": "The cache engine",
+          "importance": "critical",
+          "phase": "p1",
+          "why": "It sets how far the API scales and how fast a session can be revoked. Pick wrong and every live session has to be migrated.",
+          "proposal": "A shared **Redis** cache.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              { "id": "redis", "label": "Redis", "recommended": true, "pros": ["Instant revocation"], "cons": ["One more service to run"], "effort": "M",
+                "tasks": [{ "id": "client", "title": "Add the Redis client", "files": [{ "path": "src/cache/redis.js", "op": "create" }], "acceptance": ["Connection checked at startup"], "verify": ["npm test -- cache"] }] },
+              { "id": "memory", "label": "In-process memory", "pros": ["Nothing to run"], "cons": ["Lost on restart"], "effort": "S",
+                "tasks": [{ "id": "lru", "title": "In-memory LRU cache", "files": [{ "path": "src/cache/lru.js", "op": "create" }] }] }
+            ]
+          },
+          "tasks": [
+            { "id": "iface", "title": "Common cache interface", "files": [{ "path": "src/cache/index.js", "op": "create" }], "acceptance": ["get / set / del exposed"], "verify": ["npm test -- cache"] }
+          ]
+        },
+        {
+          "id": "D2",
+          "title": "The time to live",
+          "importance": "important",
+          "phase": "p1",
+          "why": "Too long and a revoked session survives; too short and the database takes the load.",
+          "proposal": "A sliding TTL of 30 minutes.",
+          "visual": { "kind": "load_curve", "value_from": "D2" },
+          "control": { "kind": "number", "min": 5, "max": 120, "step": 5, "default": 30, "unit": "min" },
+          "tasks": [
+            { "id": "ttl", "title": "TTL of {{value}} {{unit}}", "do": "Set the expiry to {{value}} {{unit}}.", "after": ["D1/iface"], "acceptance": ["A session expires after {{value}} {{unit}}"] }
+          ]
+        },
+        {
+          "id": "D3",
+          "title": "Logging",
+          "importance": "minor",
+          "proposal": "Log cache failures at `warn` level."
+        }
+      ]
+    },
+    {
+      "id": "interface",
+      "section": "2 · Interface",
+      "title": "What users see",
+      "decisions": [
+        {
+          "id": "D4",
+          "title": "Screens affected",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Every screen listed here must show the session state.",
+          "items": [
+            { "id": "login", "title": "Sign-in", "detail": "Message when the session has expired.", "tasks": [{ "id": "login-msg", "title": "Expiry message", "files": [{ "path": "src/ui/login.js", "op": "modify" }] }] },
+            { "id": "profile", "title": "Profile", "detail": "List of active sessions." }
+          ],
+          "depends_on": ["D1"]
+        },
+        {
+          "id": "D6",
+          "title": "Where to warn before expiry",
+          "importance": "important",
+          "phase": "p2",
+          "why": "A warning avoids losing a form in progress, but too many warnings get ignored.",
+          "control": {
+            "kind": "multi",
+            "options": [
+              { "id": "banner", "label": "Banner in the app", "recommended": true, "tasks": [{ "id": "banner", "title": "Expiry banner", "files": [{ "path": "src/ui/banner.js", "op": "create" }] }] },
+              { "id": "email", "label": "E-mail", "tasks": [{ "id": "email", "title": "Expiry e-mail", "files": [{ "path": "src/mail/expiry.js", "op": "create" }] }] }
+            ]
+          }
+        },
+        {
+          "id": "D5",
+          "title": "Phase order",
+          "importance": "important",
+          "why": "Starting with the interface shows something sooner, at the cost of a stub.",
+          "control": { "kind": "order", "source": "phases" }
+        }
+      ]
+    }
+  ]
+}

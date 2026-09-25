@@ -1,0 +1,1210 @@
+{
+  "$schema": "../../../../engine/schema/plan.schema.json",
+  "version": 2,
+  "id": "tech-feature",
+  "title": "Email reminders for overdue tasks",
+  "subtitle": "Tasklet · feature plan",
+  "lang": "en",
+  "accent": "blue",
+  "source": { "kind": "request" },
+  "context": "**Request:** send email reminders for overdue tasks.\n\nTasklet is a task manager: Express API, SQLite (`better-sqlite3`), framework-free front end in `public/`. About 1,200 active users, **a single instance** in production. Today an overdue task is only shown in red in the list, and only if the user opens the app; no email goes out.\n\n**In scope:** detecting overdue tasks, sending the emails, letting users act or unsubscribe from the email itself. **Out of scope:** push notifications, SMS, per-task reminder settings.",
+  "phases": [
+    { "id": "p1", "title": "Data and migrations", "short": "Data", "estimate": "≈ 0.5 d", "days": 0.5 },
+    { "id": "p2", "title": "Sending email", "short": "Sending", "estimate": "≈ 1.5 d", "days": 1.5 },
+    { "id": "p3", "title": "Reminder scheduling", "short": "Scheduling", "estimate": "≈ 2 d", "days": 2 },
+    {
+      "id": "p4",
+      "title": "Preferences and rollout",
+      "short": "Rollout",
+      "estimate": "≈ 1.5 d",
+      "days": 1.5
+    }
+  ],
+  "glossary": [
+    {
+      "term": "SMTP",
+      "definition": "The standard protocol for sending email: our server hands each message to a relay, which delivers it to the recipients' mailbox providers."
+    },
+    {
+      "term": "cron",
+      "definition": "A scheduler that runs a command at fixed times, for example “every 15 minutes”."
+    },
+    {
+      "term": "idempotency",
+      "aliases": ["idempotent"],
+      "definition": "The property of an operation that can be replayed with no additional effect: run it twice and it still sends only one email."
+    },
+    {
+      "term": "DKIM",
+      "aliases": ["SPF", "DMARC"],
+      "definition": "DNS records published with the domain that prove to mailbox providers an email really comes from tasklet.app; without them, reminders end up in spam."
+    },
+    {
+      "term": "opt-out",
+      "aliases": ["opt-in"],
+      "definition": "Opt-out: on by default, the user can turn it off. Opt-in: off until the user turns it on."
+    },
+    {
+      "term": "signed token",
+      "aliases": ["signed tokens", "signed link", "signed links"],
+      "definition": "A code appended to a link that only our server can produce: it proves the link comes from one of our emails and hasn't been tampered with."
+    }
+  ],
+  "pages": [
+    {
+      "id": "trigger",
+      "section": "1 · Triggering",
+      "title": "Triggering reminders",
+      "intro": "What starts the reminders, when a task counts as overdue, and how we make sure the same reminder never goes out twice.",
+      "visual": {
+        "kind": "diagram",
+        "caption": "One run of the reminder job, from scheduler to inbox",
+        "nodes": [
+          { "id": "cron", "label": "Scheduler", "sub": "every N min", "col": 1, "row": 0, "tone": "success" },
+          { "id": "db", "label": "SQLite", "sub": "tasks · users", "col": 0, "row": 1, "tone": "muted" },
+          { "id": "job", "label": "Reminder job", "sub": "runReminders()", "col": 1, "row": 1, "tone": "primary" },
+          { "id": "mailer", "label": "Mailer", "sub": "templates + SMTP", "col": 2, "row": 1, "tone": "success" },
+          { "id": "ledger", "label": "Reminders table", "sub": "unique key", "col": 1, "row": 2, "tone": "success" },
+          { "id": "inbox", "label": "Inbox", "sub": "the user's", "col": 2, "row": 2, "tone": "muted" },
+          { "id": "api", "label": "Tasklet API", "sub": "signed link", "col": 2, "row": 3, "tone": "muted" }
+        ],
+        "edges": [
+          { "from": "cron", "to": "job", "label": "triggers" },
+          { "from": "job", "to": "db" },
+          { "from": "job", "to": "ledger", "label": "claims" },
+          { "from": "job", "to": "mailer" },
+          { "from": "mailer", "to": "inbox", "label": "SMTP" },
+          { "from": "inbox", "to": "api", "label": "click", "dashed": true }
+        ]
+      },
+      "decisions": [
+        {
+          "id": "D1",
+          "title": "What triggers the reminders",
+          "importance": "critical",
+          "phase": "p3",
+          "why": "The trigger decides whether a reminder survives a restart, whether it goes out twice the day we add a second instance, and what extra infrastructure we have to run. Changing it after launch means rewriting how the job is started and monitored.",
+          "proposal": "A **cron** inside the Express process (the `node-cron` library) that runs the reminder job every N minutes (D4). Tasklet runs on a single instance: a message queue would be one more service to operate, with nothing to gain today.",
+          "learn_more": "**Why not `setInterval`?** It doesn't align with the clock: a restart at 8:07 shifts every run by 7 minutes. `node-cron` fires at fixed times.\n\n**When to move to a worker?** The day we start a second API instance. The duplicate guard (D3) already prevents duplicate emails, but every instance would repeat the same work.\n\nDocs: [node-cron](https://www.npmjs.com/package/node-cron), [BullMQ](https://docs.bullmq.io/).",
+          "facts": [
+            { "label": "Production instances", "value": "1" },
+            { "label": "Open tasks with a due date", "value": "≈ 18,000" },
+            { "label": "Run duration (measured locally)", "value": "≈ 40 ms" }
+          ],
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "in-process",
+                "label": "Cron inside the server (node-cron)",
+                "detail": "The job runs in the same process as the API.",
+                "recommended": true,
+                "pros": ["Nothing extra to deploy or pay for", "Runs the same way in dev and production"],
+                "cons": ["A second instance would duplicate the work", "A slow run slows down the API"],
+                "effort": "S",
+                "cost": "€0",
+                "tasks": [
+                  {
+                    "id": "scheduler",
+                    "title": "Schedule the job inside the server",
+                    "do": "Add the `node-cron` dependency. Create `src/jobs/scheduler.js`: `startReminderScheduler()` schedules `runReminders` every `config.reminders.intervalMinutes` minutes and skips a run if the previous one hasn't finished. Call it from `src/server.js` after `app.listen`, only when `config.reminders.enabled` is true (D13).",
+                    "files": [
+                      { "path": "package.json", "op": "modify" },
+                      { "path": "src/jobs/scheduler.js", "op": "create" },
+                      { "path": "src/server.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "With `REMINDERS_ENABLED=false`, startup logs “reminders disabled” and schedules nothing",
+                      "A run triggered while another is in progress is skipped and logged",
+                      "`npm test` exits on its own: no test starts a timer"
+                    ],
+                    "verify": ["npm test"],
+                    "after": ["job", "D4/interval", "D13/flag"]
+                  }
+                ]
+              },
+              {
+                "id": "worker",
+                "label": "Separate worker and queue (BullMQ + Redis)",
+                "detail": "A second process consumes a queue of repeatable jobs.",
+                "pros": ["Works with several API instances", "Retries and a dashboard out of the box"],
+                "cons": ["Redis to deploy, monitor and pay for", "Two processes to supervise"],
+                "effort": "L",
+                "cost": "≈ €15/month (managed Redis)",
+                "tasks": [
+                  {
+                    "id": "queue",
+                    "title": "BullMQ queue and worker",
+                    "do": "Add `bullmq`. `src/jobs/queue.js` declares the `reminders` queue and a job that repeats every `config.reminders.intervalMinutes` minutes; `src/worker.js` consumes the queue and calls `runReminders`. Add an `npm run worker` script and the `REDIS_URL` variable.",
+                    "files": [
+                      { "path": "package.json", "op": "modify" },
+                      { "path": "src/jobs/queue.js", "op": "create" },
+                      { "path": "src/worker.js", "op": "create" },
+                      { "path": ".env.example", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "Stopping the worker doesn't stop the API",
+                      "A failed run is retried 3 times with increasing backoff",
+                      "Two workers started together never process the same run"
+                    ],
+                    "verify": ["npm test"],
+                    "after": ["job", "D4/interval"]
+                  }
+                ]
+              },
+              {
+                "id": "system-cron",
+                "label": "System cron running a script",
+                "detail": "The server's crontab calls `npm run reminders:once`.",
+                "pros": ["No timer in the code", "Isolated from the API: a crash doesn't take it down"],
+                "cons": [
+                  "Configured on the server, outside the repo: easy to forget",
+                  "Nothing runs in dev unless started by hand"
+                ],
+                "effort": "S",
+                "cost": "€0",
+                "tasks": [
+                  {
+                    "id": "script",
+                    "title": "Script run by the system cron",
+                    "do": "Create `bin/send-reminders.js`: applies migrations, calls `runReminders` once and exits with code 0, or 1 if at least one send failed. Add an `npm run reminders:once` script; the crontab line to install on the server goes in a comment at the top of the file.",
+                    "files": [
+                      { "path": "bin/send-reminders.js", "op": "create" },
+                      { "path": "package.json", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "`npm run reminders:once` exits on its own and prints the run summary",
+                      "The exit code is 1 if any send failed"
+                    ],
+                    "verify": ["npm run reminders:once"],
+                    "after": ["job", "D4/interval"]
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "job",
+              "title": "Write the runReminders job",
+              "do": "Create `src/jobs/reminders.js`, which exports `runReminders({ now, mailer })`: reads overdue tasks (`Task.listOverdue(now)`, D2), groups them by user, sends one email per user and returns `{ examined, sent, failed }`. Placeholder content: the list of titles; the daily email from D8 replaces it. The job doesn't know what triggers it: a test calls it directly with a fixed clock.",
+              "files": [
+                { "path": "src/jobs/reminders.js", "op": "create" },
+                { "path": "test/reminders.test.js", "op": "create" }
+              ],
+              "acceptance": [
+                "`runReminders` called with a fixed date returns `{ examined, sent, failed }` without starting a timer",
+                "Two overdue tasks for the same user produce a single email",
+                "A failed send for one user doesn't stop the sends to the next ones"
+              ],
+              "verify": ["node --test test/reminders.test.js"],
+              "after": ["D2/overdue-query", "D5/mailer", "D11/test-mailer"]
+            }
+          ]
+        },
+        {
+          "id": "D2",
+          "title": "When a task becomes overdue",
+          "importance": "important",
+          "phase": "p3",
+          "why": "`due_date` is a date without a time: “September 25” doesn't end at the same instant in Paris and in New York. Get this wrong and the reminder lands in the middle of the night, or flags a task as overdue before it is, and users stop trusting the reminders.",
+          "proposal": "A task is overdue **the day after its due date, from 8 am in the user's time zone**. The browser sends its time zone on load; the default is `Europe/Paris`.",
+          "learn_more": "The front end already has this bug: `public/app.js` computes “today” in UTC (`toISOString()`). In New York, after 8 pm, a task due that day already shows as overdue. The “Send the browser's time zone” task fixes it along the way.\n\nLocal time is computed in JavaScript (`Intl.DateTimeFormat` with the user's time zone): SQLite knows nothing about time zones.",
+          "facts": [
+            { "label": "Users outside the Paris time zone", "value": "≈ 9%" },
+            { "label": "Due date format", "value": "YYYY-MM-DD, no time" }
+          ],
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "user-tz",
+                "label": "Per-user time zone",
+                "recommended": true,
+                "pros": ["8 am reminder for everyone, wherever they are", "Correct around midnight"],
+                "cons": [
+                  "A `timezone` column, plus detection in the browser",
+                  "Local time computed per user in the job"
+                ],
+                "effort": "M",
+                "tasks": [
+                  {
+                    "id": "tz-column",
+                    "title": "Add the users.timezone column",
+                    "phase": "p1",
+                    "do": "Migration `003_users_timezone.sql`: `ALTER TABLE users ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Europe/Paris'`. `User.findById` returns `timezone`; `PATCH /api/me` accepts it if it is listed in `Intl.supportedValuesOf('timeZone')`.",
+                    "files": [
+                      { "path": "src/db/migrations/003_users_timezone.sql", "op": "create" },
+                      { "path": "src/models/user.js", "op": "modify" },
+                      { "path": "src/routes/users.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "After `npm run migrate`, existing users have `Europe/Paris`",
+                      "`PATCH /api/me` with the time zone `Mars/Olympus` returns 400"
+                    ],
+                    "verify": ["npm run migrate", "npm test"]
+                  },
+                  {
+                    "id": "tz-detect",
+                    "title": "Send the browser's time zone",
+                    "phase": "p4",
+                    "do": "In `public/app.js`, after `GET /api/me`, send `Intl.DateTimeFormat().resolvedOptions().timeZone` with `PATCH /api/me` if it differs from the stored time zone. Compute `today` in the local time zone instead of UTC.",
+                    "files": [{ "path": "public/app.js", "op": "modify" }],
+                    "acceptance": [
+                      "A browser set to America/New_York saves that time zone on first load",
+                      "No `PATCH` when the stored time zone is already correct",
+                      "In New York at 9 pm, a task due that day is not shown as overdue"
+                    ],
+                    "after": ["tz-column"]
+                  }
+                ]
+              },
+              {
+                "id": "server-tz",
+                "label": "One time zone for everyone (Europe/Paris)",
+                "pros": ["Nothing to store or detect", "A plain SQL query"],
+                "cons": [
+                  "In New York, the 8 am reminder arrives at 2 am",
+                  "False overdue flags between midnight and 8 am outside Europe"
+                ],
+                "effort": "S"
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "overdue-query",
+              "title": "Overdue tasks query",
+              "do": "Add `Task.listOverdue(now)` to `src/models/task.js`: tasks with `done = 0` whose `due_date` is before today's date in the chosen time zone, only once local time is past 8 am. Chosen option: {{choice.label}}. Also return `userId`, `email` and the time zone.",
+              "files": [
+                { "path": "src/models/task.js", "op": "modify" },
+                { "path": "test/tasks.test.js", "op": "modify" }
+              ],
+              "acceptance": [
+                "At 7:59 am local time, a task due the day before is not returned; at 8:00 am, it is",
+                "A task due today, already done or without a due date is never returned"
+              ],
+              "verify": ["node --test test/tasks.test.js"]
+            }
+          ]
+        },
+        {
+          "id": "D3",
+          "title": "How to guarantee one reminder per task",
+          "importance": "important",
+          "phase": "p1",
+          "why": "The job can process the same task twice: a restart mid-run, a manual rerun, a second instance some day. Without a guard, the user gets the same reminder two or three times, and that is the first reason people unsubscribe.",
+          "proposal": "Make sending **idempotent**: before sending, the job claims the reminder by inserting `(task_id, kind, period)` into a `reminders` table with a unique key. Insert rejected: the reminder already went out, skip it. Send failed: release the claim, and the next run retries.",
+          "learn_more": "`period` is the due date for a task's reminders, and the ISO week (`2026-W39`) for the Monday digest. If the user pushes the due date back, the period changes and the task can be reminded again.\n\nWhy not a simple in-memory set? It is lost on restart, which is exactly the case we need to cover.\n\nThe table grows by about 400 rows a day; a daily purge of rows older than 90 days is enough.",
+          "visual": {
+            "kind": "code",
+            "lang": "sql",
+            "caption": "The unique key does the work: two concurrent runs can't claim the same row.",
+            "code": "CREATE TABLE reminders (\n  id       INTEGER PRIMARY KEY,\n  task_id  INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,\n  kind     TEXT    NOT NULL,  -- 'due-today', 'overdue', 'weekly'\n  period   TEXT    NOT NULL,  -- the due date, or the ISO week\n  sent_at  TEXT    NOT NULL DEFAULT (datetime('now')),\n  UNIQUE (task_id, kind, period)\n);\n\n-- Claim: 1 row inserted = send it; 0 = already sent.\nINSERT OR IGNORE INTO reminders (task_id, kind, period) VALUES (?, ?, ?);",
+            "highlight": [7, 11]
+          },
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "ledger",
+                "label": "A reminders table with a unique key",
+                "recommended": true,
+                "pros": [
+                  "The database rejects duplicates, even when two runs overlap",
+                  "A history of sends, useful for support"
+                ],
+                "cons": ["One more table and migration", "≈ 400 rows a day: needs a purge"],
+                "effort": "M",
+                "tasks": [
+                  {
+                    "id": "ledger-table",
+                    "title": "Create the reminders table",
+                    "do": "Migration `002_reminders.sql`: `reminders` table (`id`, `task_id` referencing `tasks(id)` with `ON DELETE CASCADE`, `kind`, `period`, `sent_at` defaulting to `datetime('now')`) with a `UNIQUE (task_id, kind, period)` constraint. `period` is the due date, or the ISO week for the digest.",
+                    "files": [{ "path": "src/db/migrations/002_reminders.sql", "op": "create" }],
+                    "acceptance": [
+                      "`npm run migrate` creates the table on an existing database without touching tasks",
+                      "Deleting a task deletes its claims"
+                    ],
+                    "verify": ["npm run migrate"]
+                  },
+                  {
+                    "id": "ledger-model",
+                    "title": "Reminder model: claim, release, purge",
+                    "do": "`src/models/reminder.js`: `claim(taskId, kind, period)` runs `INSERT OR IGNORE` and returns `true` if a row was inserted; `release(taskId, kind, period)` deletes it; `purgeOlderThan(days)` deletes older rows.",
+                    "files": [
+                      { "path": "src/models/reminder.js", "op": "create" },
+                      { "path": "test/reminder-model.test.js", "op": "create" }
+                    ],
+                    "acceptance": [
+                      "`claim` returns `true`, then `false` for the same triple",
+                      "`release` followed by `claim` returns `true` again",
+                      "`purgeOlderThan(90)` leaves today's rows alone"
+                    ],
+                    "verify": ["node --test test/reminder-model.test.js"],
+                    "after": ["ledger-table"]
+                  }
+                ]
+              },
+              {
+                "id": "column",
+                "label": "A last_reminded_at column on tasks",
+                "pros": ["A column instead of a table", "Nothing to purge"],
+                "cons": [
+                  "One reminder per task: no due-day then overdue, no digest",
+                  "No history for support"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "column-migration",
+                    "title": "Add the tasks.last_reminded_at column",
+                    "do": "Migration `002_tasks_last_reminded.sql`. `Task.claimReminder(id)` runs `UPDATE tasks SET last_reminded_at = datetime('now') WHERE id = ? AND last_reminded_at IS NULL` and returns `changes === 1`; `Task.releaseReminder(id)` resets the column to `NULL`.",
+                    "files": [
+                      { "path": "src/db/migrations/002_tasks_last_reminded.sql", "op": "create" },
+                      { "path": "src/models/task.js", "op": "modify" }
+                    ],
+                    "acceptance": ["Two calls to `claimReminder` on the same task return `true`, then `false`"],
+                    "verify": ["npm run migrate", "npm test"]
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "claim",
+              "title": "Claim before sending, release on failure",
+              "phase": "p3",
+              "do": "In `runReminders`, claim each reminder before sending it and skip those already claimed; if the send fails, release the claim so the next run retries. Guard: {{choice.label}}.",
+              "acceptance": [
+                "Two calls to `runReminders` with the same clock send each email only once",
+                "After a simulated send failure, the next run sends the reminder again"
+              ],
+              "verify": ["node --test test/reminders.test.js"],
+              "after": ["D1/job"],
+              "files": [
+                { "path": "src/jobs/reminders.js", "op": "modify" },
+                { "path": "test/reminders.test.js", "op": "modify" }
+              ]
+            }
+          ],
+          "depends_on": ["D1"]
+        },
+        {
+          "id": "D4",
+          "title": "How often the job runs",
+          "importance": "important",
+          "phase": "p3",
+          "why": "The interval sets the maximum delay of a reminder and the load on the database. At 5 minutes, the job queries SQLite 288 times a day, almost always for nothing; at 60 minutes, the 8 am reminder can arrive at 8:59.",
+          "proposal": "One run **every 15 minutes**: the reminder arrives between 8:00 and 8:15, for a query that takes a few milliseconds.",
+          "learn_more": "Pick a value that divides 60: 5, 10, 15, 20, 30 or 60. With 25, the cron fires at :00, :25 and :50, then again at :00, so once an hour the gap drops to 10 minutes.",
+          "facts": [
+            { "label": "Runs per day at 15 min", "value": "96" },
+            { "label": "Run duration", "value": "≈ 40 ms" }
+          ],
+          "control": { "kind": "number", "min": 5, "max": 60, "step": 5, "default": 15, "unit": "min" },
+          "tasks": [
+            {
+              "id": "interval",
+              "title": "One run every {{value}} {{unit}}",
+              "do": "Add `REMINDER_INTERVAL_MINUTES` to `src/config.js` (`config.reminders.intervalMinutes`, default {{value}}) and to `.env.example`. Reject a value outside 5–60 at startup.",
+              "files": [{ "path": "src/config.js", "op": "modify" }, { "path": ".env.example", "op": "modify" }],
+              "acceptance": [
+                "With no environment variable set, `config.reminders.intervalMinutes` is {{value}}",
+                "With `REMINDER_INTERVAL_MINUTES=2`, startup fails with a message naming the variable"
+              ],
+              "verify": ["node -e \"console.log(require('./src/config').reminders.intervalMinutes)\""]
+            }
+          ],
+          "depends_on": ["D1"]
+        }
+      ]
+    },
+    {
+      "id": "sending",
+      "section": "2 · Sending",
+      "title": "Sending the emails",
+      "intro": "The service that delivers the emails, how their content is written, and the address they are sent from.",
+      "visual": { "kind": "compare", "options_from": "D5", "caption": "The two ways to send, side by side" },
+      "decisions": [
+        {
+          "id": "D5",
+          "title": "Which service sends the emails",
+          "importance": "critical",
+          "phase": "p2",
+          "why": "This choice decides whether reminders land in the inbox or in spam, and sets the monthly cost. It also dictates the domain setup (SPF, DKIM): switching services means redoing it and rebuilding the sender reputation, which costs several weeks of poorly delivered reminders.",
+          "proposal": "Send over **SMTP** with Nodemailer, through the relay of a transactional email provider (Brevo, Postmark or similar). The code depends only on four `SMTP_*` variables: switching providers doesn't touch the code.",
+          "learn_more": "**Ruled out from the start: running our own mail server (Postfix).** Mailbox providers judge an email by the reputation of the IP address that sends it: a new IP lands in spam for weeks, and it is one more server to patch. A provider lends us IPs that are already trusted, for €0–25/month at our volume.\n\n**SMTP or API?** Both go through the same provider. The API also reports bounces and complaints; we can move to it later without changing providers, by replacing only `src/mail/mailer.js`.\n\nSince 2024, Gmail and Yahoo require SPF, DKIM, DMARC and one-click unsubscribe from regular senders: see [Google's guidelines](https://support.google.com/a/answer/81126).",
+          "facts": [
+            { "label": "Estimated volume", "value": "≈ 300 emails/day" },
+            { "label": "Active users", "value": "≈ 1,200" }
+          ],
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "smtp",
+                "label": "Provider's SMTP relay (Nodemailer)",
+                "detail": "Nodemailer speaks SMTP to any provider; Mailpit stands in for it locally.",
+                "recommended": true,
+                "pros": ["Switch providers by changing 4 variables", "Same code in dev and production"],
+                "cons": [
+                  "Bounces and complaints are only visible in the provider's dashboard",
+                  "One SMTP connection per run, slower than an HTTP call"
+                ],
+                "effort": "S",
+                "cost": "€0–25/month depending on volume",
+                "tasks": [
+                  {
+                    "id": "smtp-config",
+                    "title": "SMTP transport and SMTP_* variables",
+                    "do": "Add `nodemailer`. Read `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` and `SMTP_PASS` in `src/config.js` (`config.smtp`) and document them, empty, in `.env.example`. `createMailer` builds the transport with `nodemailer.createTransport(config.smtp)`.",
+                    "files": [
+                      { "path": "package.json", "op": "modify" },
+                      { "path": "src/config.js", "op": "modify" },
+                      { "path": ".env.example", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "With `SMTP_HOST` empty in production, startup fails with a message naming the variable",
+                      "No real values in `.env.example`"
+                    ],
+                    "verify": ["npm test"],
+                    "after": ["mailer"]
+                  }
+                ]
+              },
+              {
+                "id": "api",
+                "label": "Transactional service's HTTP API",
+                "detail": "HTTP calls to the provider, with a webhook for bounces.",
+                "pros": ["Bounces and complaints reported by webhook", "Open and click statistics"],
+                "cons": [
+                  "Code tied to the provider: switching means rewriting the mailer",
+                  "One more API key and public route to protect"
+                ],
+                "effort": "M",
+                "cost": "≈ €15/month (20,000 emails)",
+                "tasks": [
+                  {
+                    "id": "api-client",
+                    "title": "HTTP client and bounce webhook",
+                    "do": "`createMailer` calls the provider's API with `fetch` and `MAIL_API_KEY`. Create `src/routes/webhooks.js` (`POST /webhooks/mail`): it verifies the provider's signature and turns off the user's reminders after a complaint or a hard bounce.",
+                    "files": [
+                      { "path": "src/routes/webhooks.js", "op": "create" },
+                      { "path": "src/server.js", "op": "modify" },
+                      { "path": "src/config.js", "op": "modify" },
+                      { "path": ".env.example", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "A webhook with an invalid signature returns 401 and changes nothing",
+                      "After a complaint, the user no longer receives reminders"
+                    ],
+                    "verify": ["npm test"],
+                    "after": ["mailer"]
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "mailer",
+              "title": "createMailer sending module",
+              "do": "Create `src/mail/mailer.js`: `createMailer(config)` returns `{ send({ to, subject, text, html, headers }) }`. Transport: {{choice.label}}. No other code ever imports the provider directly.",
+              "files": [
+                { "path": "src/mail/mailer.js", "op": "create" },
+                { "path": "test/mail.test.js", "op": "create" }
+              ],
+              "acceptance": [
+                "`send` returns the message id accepted by the provider",
+                "A provider error is surfaced with its code, without the recipient's address in the error message"
+              ],
+              "verify": ["node --test test/mail.test.js"],
+              "after": ["D11/test-mailer"]
+            },
+            {
+              "id": "dns",
+              "title": "Authenticate the sending domain (SPF, DKIM, DMARC)",
+              "do": "Publish the TXT records supplied by the service (SPF and DKIM) at the DNS host for `tasklet.app`, then a DMARC record with `p=none`, to observe before tightening.",
+              "acceptance": [
+                "A test email received in Gmail shows `spf=pass` and `dkim=pass` under “Show original”",
+                "`nslookup -type=TXT _dmarc.tasklet.app` returns the DMARC record"
+              ],
+              "verify": ["nslookup -type=TXT _dmarc.tasklet.app"]
+            }
+          ]
+        },
+        {
+          "id": "D6",
+          "title": "How to write the email templates",
+          "importance": "important",
+          "phase": "p2",
+          "why": "The templates insert task titles typed by users into HTML. A badly escaped title can slip a malicious link into an email sent under Tasklet's name. The choice also sets how long it takes to add a new type of email (D8).",
+          "proposal": "JavaScript functions that return `{ subject, text, html }`, with `escapeHtml` applied to all user-supplied data. Every email also has a plain-text version.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "literals",
+                "label": "JavaScript functions (template literals)",
+                "recommended": true,
+                "pros": ["No dependencies", "Testable like any other function"],
+                "cons": [
+                  "Email HTML written by hand (tables, inline styles)",
+                  "Escaping relies on discipline: a test enforces it"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "templates-js",
+                    "title": "Templates as JavaScript functions",
+                    "do": "`src/mail/layout.js`: `layout({ title, body })` produces the shared HTML (600 px table, inline styles) and exports `escapeHtml`. `src/mail/templates.js`: one function per email type, each returning `{ subject, text, html }`.",
+                    "files": [
+                      { "path": "src/mail/layout.js", "op": "create" },
+                      { "path": "src/mail/templates.js", "op": "create" },
+                      { "path": "test/mail.test.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "A task titled `<img src=x onerror=alert(1)>` comes out escaped in the HTML",
+                      "Every template returns a non-empty `text` and a `subject` under 80 characters"
+                    ],
+                    "verify": ["node --test test/mail.test.js"],
+                    "after": ["D5/mailer"]
+                  }
+                ]
+              },
+              {
+                "id": "mjml",
+                "label": "MJML compiled to HTML",
+                "pros": [
+                  "Reliable rendering in Outlook as well as Gmail",
+                  "Readable markup that non-developers can edit"
+                ],
+                "cons": ["Heavy dependency (≈ 10 MB installed)", "Escaping handed off to a template engine (Handlebars)"],
+                "effort": "M",
+                "tasks": [
+                  {
+                    "id": "templates-mjml",
+                    "title": "MJML templates",
+                    "do": "Add `mjml` and `handlebars`. One `.mjml` file per email type in `src/mail/templates/`, compiled at startup; `src/mail/templates.js` fills them with Handlebars, which escapes by default.",
+                    "files": [
+                      { "path": "package.json", "op": "modify" },
+                      { "path": "src/mail/templates/overdue.mjml", "op": "create" },
+                      { "path": "src/mail/templates.js", "op": "create" },
+                      { "path": "test/mail.test.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "A task titled `<img src=x onerror=alert(1)>` comes out escaped in the HTML",
+                      "MJML compilation produces no warnings"
+                    ],
+                    "verify": ["node --test test/mail.test.js"],
+                    "after": ["D5/mailer"]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "D7",
+          "title": "The address reminders come from",
+          "importance": "minor",
+          "phase": "p2",
+          "why": "A `noreply` address discourages replies, and user replies need to reach a person.",
+          "proposal": "Reminders are sent from `Tasklet <reminders@tasklet.app>`, with `Reply-To: support@tasklet.app`.",
+          "tasks": [
+            {
+              "id": "from",
+              "title": "MAIL_FROM and MAIL_REPLY_TO variables",
+              "do": "Add `config.mail.from` and `config.mail.replyTo` to `src/config.js`, with these defaults, and document them in `.env.example`. `createMailer` sets both headers on every email.",
+              "files": [
+                { "path": "src/config.js", "op": "modify" },
+                { "path": ".env.example", "op": "modify" },
+                { "path": "src/mail/mailer.js", "op": "modify" }
+              ],
+              "acceptance": [
+                "With no variable set, the sender is `Tasklet <reminders@tasklet.app>`",
+                "Every email sent carries `Reply-To: support@tasklet.app`"
+              ],
+              "verify": ["node --test test/mail.test.js"],
+              "after": ["D5/mailer"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "section": "3 · Users",
+      "title": "What users receive",
+      "intro": "Which emails go out, what users can do straight from an email, and whether reminders are on by default.",
+      "visual": {
+        "kind": "before_after",
+        "caption": "The same overdue task, from the user's side",
+        "before": {
+          "title": "Today",
+          "text": "The task “Send the quote to Martin”, due yesterday, shows up in red in the list, but only if the user opens Tasklet."
+        },
+        "after": {
+          "title": "After",
+          "text": "This morning at 8 am, an email “1 overdue task: Send the quote to Martin”, with a “Mark as done” button and a link to stop these reminders."
+        }
+      },
+      "decisions": [
+        {
+          "id": "D8",
+          "title": "Which emails to send",
+          "importance": "important",
+          "phase": "p3",
+          "why": "Each type adds a template, a query and more sends. Too many emails and users unsubscribe from everything; too few and overdue tasks go unnoticed, which is the whole point of the request.",
+          "proposal": "Three types, to be judged one by one. They go out together: **at most one email per user per day**, with one section per type.",
+          "visual": {
+            "kind": "stats",
+            "stats": [
+              { "label": "Due that day", "value": "≈ 180", "sub": "tasks per weekday" },
+              { "label": "Newly overdue", "value": "≈ 220", "sub": "tasks per day" },
+              { "label": "Overdue for 7+ days", "value": "≈ 900", "sub": "tasks, every Monday" }
+            ]
+          },
+          "items": [
+            {
+              "id": "due-today",
+              "title": "Due today",
+              "tag": "Same day, 8 am",
+              "detail": "Tasks due today, so they don't slip. Heads off the delay instead of reporting it after the fact.",
+              "tasks": [
+                {
+                  "id": "due-today-section",
+                  "title": "“Due today” section",
+                  "do": "Template: the `dueToday(tasks)` section. In `runReminders`, select tasks due that day (local time ≥ 8 am), claimed with `kind = 'due-today'`.",
+                  "acceptance": [
+                    "A user with 3 tasks due today receives a single email listing all three",
+                    "A task checked off before 8 am is not included"
+                  ],
+                  "verify": ["node --test test/reminders.test.js"],
+                  "after": ["daily-mail"],
+                  "files": [
+                    { "path": "src/mail/templates.js", "op": "modify" },
+                    { "path": "src/jobs/reminders.js", "op": "modify" },
+                    { "path": "test/reminders.test.js", "op": "modify" }
+                  ]
+                }
+              ],
+              "icon": "lucide:calendar-clock"
+            },
+            {
+              "id": "overdue",
+              "title": "Overdue task",
+              "tag": "Next day, 8 am",
+              "detail": "The day after the due date, once per task. This is the core of the request.",
+              "tasks": [
+                {
+                  "id": "overdue-section",
+                  "title": "“Overdue” section",
+                  "do": "Template: the `overdue(tasks)` section. `runReminders` fills it with the tasks from `Task.listOverdue(now)`, claimed with `kind = 'overdue'` and `period` = the due date.",
+                  "acceptance": [
+                    "A task due yesterday appears in this morning's email, and never again on the following days",
+                    "The subject gives the number of tasks: “2 overdue tasks”"
+                  ],
+                  "verify": ["node --test test/reminders.test.js"],
+                  "after": ["daily-mail"],
+                  "files": [
+                    { "path": "src/mail/templates.js", "op": "modify" },
+                    { "path": "src/jobs/reminders.js", "op": "modify" },
+                    { "path": "test/reminders.test.js", "op": "modify" }
+                  ]
+                }
+              ],
+              "icon": "lucide:bell"
+            },
+            {
+              "id": "weekly",
+              "title": "Monday digest",
+              "tag": "Weekly",
+              "detail": "On Mondays, every task that has been overdue for more than 7 days. Without it, a forgotten task is reminded only once.",
+              "tasks": [
+                {
+                  "id": "weekly-section",
+                  "title": "Monday “Still overdue” section",
+                  "do": "Template: the `weekly(tasks)` section. On Mondays, `runReminders` fills it with tasks overdue for more than 7 days, claimed with `kind = 'weekly'` and `period` = the ISO week.",
+                  "acceptance": [
+                    "On Monday, a user receives a single email, even if they also have a task that fell overdue the day before",
+                    "A task overdue for 6 days is not included"
+                  ],
+                  "verify": ["node --test test/reminders.test.js"],
+                  "after": ["daily-mail"],
+                  "files": [
+                    { "path": "src/mail/templates.js", "op": "modify" },
+                    { "path": "src/jobs/reminders.js", "op": "modify" },
+                    { "path": "test/reminders.test.js", "op": "modify" }
+                  ]
+                }
+              ],
+              "icon": "lucide:inbox"
+            }
+          ],
+          "tasks": [
+            {
+              "id": "daily-mail",
+              "title": "One email per user per day",
+              "do": "In `runReminders`, group the sections of the selected types by user and send a single `daily({ user, sections })` email (template in `src/mail/templates.js`). The subject reflects the most urgent section; nothing is sent if every section is empty.",
+              "acceptance": [
+                "A user covered by two types receives a single email with two sections",
+                "No empty email ever goes out"
+              ],
+              "verify": ["node --test test/reminders.test.js"],
+              "after": ["D3/claim", "D1/job", "D6/templates-js", "D6/templates-mjml"],
+              "files": [
+                { "path": "src/mail/templates.js", "op": "modify" },
+                { "path": "src/jobs/reminders.js", "op": "modify" },
+                { "path": "test/reminders.test.js", "op": "modify" }
+              ]
+            }
+          ],
+          "depends_on": ["D3", "D6"]
+        },
+        {
+          "id": "D9",
+          "title": "What users can do from the email",
+          "importance": "important",
+          "phase": "p4",
+          "why": "An action button is a link that acts without a sign-in: it must carry a signed token that expires, otherwise anyone could forge the link. Each action is one more public route to secure; with no action at all, users have to open the app, and many won't.",
+          "proposal": "A “View task” link and a “Mark as done” button. The button opens a one-click confirmation page, so mail security scanners, which follow links, can't check anything off by mistake.",
+          "control": {
+            "kind": "multi",
+            "options": [
+              {
+                "id": "open",
+                "label": "“View task” link",
+                "recommended": true,
+                "pros": ["No risk: the app asks the user to sign in"],
+                "cons": ["A click and a sign-in before acting"],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "deep-link",
+                    "title": "Open a task from its link",
+                    "do": "In `public/app.js`, read `#/tasks/<id>` on load, scroll to the task and highlight it (style in `public/index.html`). The templates add this link to every task.",
+                    "files": [
+                      { "path": "public/app.js", "op": "modify" },
+                      { "path": "public/index.html", "op": "modify" },
+                      { "path": "src/mail/templates.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "`/#/tasks/42` opens the app with task 42 visible and highlighted",
+                      "An unknown id shows the list as usual, with no error"
+                    ],
+                    "after": ["D6/templates-js", "D6/templates-mjml"]
+                  }
+                ]
+              },
+              {
+                "id": "done",
+                "label": "“Mark as done” button",
+                "recommended": true,
+                "pros": ["The overdue task is dealt with from the inbox"],
+                "cons": ["Public route: signed token, expires after 7 days"],
+                "effort": "M",
+                "tasks": [
+                  {
+                    "id": "done-link",
+                    "title": "“Mark as done” action via signed link",
+                    "do": "Add the `done` action to `src/routes/links.js`: the `GET` shows the task and a confirmation button, the `POST` calls `Task.markDone`. The template adds the button to every task.",
+                    "acceptance": [
+                      "Opening the link changes nothing; only the confirmation `POST` marks the task as done",
+                      "A token altered by one character, or older than 7 days, returns 410 and changes nothing"
+                    ],
+                    "verify": ["node --test test/links.test.js"],
+                    "after": ["D10/links", "D6/templates-js", "D6/templates-mjml"],
+                    "files": [
+                      { "path": "src/routes/links.js", "op": "modify" },
+                      { "path": "src/mail/templates.js", "op": "modify" },
+                      { "path": "test/links.test.js", "op": "modify" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "snooze",
+                "label": "“Snooze until tomorrow” button",
+                "pros": ["No follow-up reminder for a task that was simply pushed back"],
+                "cons": [
+                  "Moves the due date without the user opening the app",
+                  "One more signed action to maintain"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "snooze-link",
+                    "title": "“Snooze until tomorrow” action via signed link",
+                    "do": "Add the `snooze` action to `src/routes/links.js`: the confirmation `POST` moves `due_date` to the next day, in the user's time zone. The template adds the button.",
+                    "acceptance": [
+                      "After confirmation, the due date is the next day and no “overdue” reminder goes out that day",
+                      "A token altered by one character returns 410 and changes nothing"
+                    ],
+                    "verify": ["node --test test/links.test.js"],
+                    "after": ["D10/links", "D6/templates-js", "D6/templates-mjml"],
+                    "files": [
+                      { "path": "src/routes/links.js", "op": "modify" },
+                      { "path": "src/mail/templates.js", "op": "modify" },
+                      { "path": "test/links.test.js", "op": "modify" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "depends_on": ["D10"]
+        },
+        {
+          "id": "D10",
+          "title": "Reminders on by default, or off until enabled",
+          "importance": "important",
+          "phase": "p4",
+          "why": "Emailing people who didn't ask for it drives up spam complaints: above a 0.3% complaint rate, Gmail files our mail as spam and the provider (D5) may suspend the account. On the other hand, a setting that is off by default only ever gets turned on by a minority.",
+          "proposal": "Reminders **on by default** (opt-out), with a one-click unsubscribe link in every email and a checkbox in the app.",
+          "learn_more": "The unsubscribe link is not optional: Gmail and Yahoo require one-click unsubscribe (`List-Unsubscribe` and `List-Unsubscribe-Post` headers, [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)). That is why it sits in the tasks shared by both options.\n\nThe reminders are about the user's own tasks: this is a service email, not marketing. Opt-out is acceptable, as long as unsubscribing is easy.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "opt-out",
+                "label": "On by default, can be turned off (opt-out)",
+                "recommended": true,
+                "pros": ["Every user benefits from day one", "Nothing to promote in the app"],
+                "cons": ["Possibly a few complaints in the first week", "One-click unsubscribe is a must"],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "default-on",
+                    "title": "Add the email_reminders preference, on by default",
+                    "phase": "p1",
+                    "do": "Migration `004_users_email_reminders.sql`: `ALTER TABLE users ADD COLUMN email_reminders INTEGER NOT NULL DEFAULT 1`. `User.findById` returns the preference.",
+                    "files": [
+                      { "path": "src/db/migrations/004_users_email_reminders.sql", "op": "create" },
+                      { "path": "src/models/user.js", "op": "modify" }
+                    ],
+                    "acceptance": ["After `npm run migrate`, all existing users have `email_reminders = 1`"],
+                    "verify": ["npm run migrate"]
+                  }
+                ]
+              },
+              {
+                "id": "opt-in",
+                "label": "Off by default, to be turned on (opt-in)",
+                "pros": ["No complaints: only people who asked get them", "Those who turn it on read their emails"],
+                "cons": [
+                  "Low adoption: settings like this are often turned on by fewer than 20% of users",
+                  "An in-app banner to make it known"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "default-off",
+                    "title": "Add the email_reminders preference, off by default",
+                    "phase": "p1",
+                    "do": "Migration `004_users_email_reminders.sql`: `ALTER TABLE users ADD COLUMN email_reminders INTEGER NOT NULL DEFAULT 0`. `User.findById` returns the preference.",
+                    "files": [
+                      { "path": "src/db/migrations/004_users_email_reminders.sql", "op": "create" },
+                      { "path": "src/models/user.js", "op": "modify" }
+                    ],
+                    "acceptance": ["After `npm run migrate`, all existing users have `email_reminders = 0`"],
+                    "verify": ["npm run migrate"]
+                  },
+                  {
+                    "id": "banner",
+                    "title": "“Turn on email reminders” banner",
+                    "do": "In `public/app.js`, show a banner while `email_reminders = 0`, with a button that turns reminders on and a close button that hides it for 30 days.",
+                    "files": [
+                      { "path": "public/app.js", "op": "modify" },
+                      { "path": "public/index.html", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "The banner disappears as soon as reminders are turned on",
+                      "Once dismissed, it doesn't come back for 30 days"
+                    ],
+                    "after": ["default-off"]
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "links",
+              "title": "Signed links and confirmation page",
+              "do": "Create `src/lib/signed-links.js`: `sign({ userId, action, taskId }, ttlDays)` and `verify(token)`, using HMAC-SHA256 with `LINKS_SECRET`. Create `src/routes/links.js`: `GET /l/:token` shows a confirmation page, `POST /l/:token` applies the action. Mount it in `src/server.js`, outside `requireUser`.",
+              "files": [
+                { "path": "src/lib/signed-links.js", "op": "create" },
+                { "path": "src/routes/links.js", "op": "create" },
+                { "path": "src/server.js", "op": "modify" },
+                { "path": "src/config.js", "op": "modify" },
+                { "path": ".env.example", "op": "modify" },
+                { "path": "test/links.test.js", "op": "create" }
+              ],
+              "acceptance": [
+                "A token altered by one character, or expired, returns 410",
+                "Without `LINKS_SECRET` in production, startup fails",
+                "The `GET` never changes anything"
+              ],
+              "verify": ["node --test test/links.test.js"]
+            },
+            {
+              "id": "unsubscribe",
+              "title": "One-click unsubscribe",
+              "do": "Add the `unsubscribe` action to `src/routes/links.js`: it sets `email_reminders` to 0. `createMailer` adds the `List-Unsubscribe` (signed `https://` URL) and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers to every reminder; the template adds a visible link in the email footer.",
+              "acceptance": [
+                "The link works without signing in and takes a single click",
+                "A direct `POST` to the `List-Unsubscribe` URL unsubscribes the user (Gmail's button)",
+                "Every reminder carries both headers"
+              ],
+              "verify": ["node --test test/links.test.js"],
+              "after": ["links", "D5/mailer", "D6/templates-js", "D6/templates-mjml"],
+              "files": [
+                { "path": "src/routes/links.js", "op": "modify" },
+                { "path": "src/mail/mailer.js", "op": "modify" },
+                { "path": "src/mail/templates.js", "op": "modify" },
+                { "path": "test/links.test.js", "op": "modify" }
+              ]
+            },
+            {
+              "id": "settings",
+              "title": "“Receive reminders” checkbox in the app",
+              "do": "Add the checkbox to `public/index.html` and wire it up in `public/app.js`. `PATCH /api/me` accepts `email_reminders` (boolean). `runReminders` skips users who unchecked it, for every email type.",
+              "files": [
+                { "path": "public/index.html", "op": "modify" },
+                { "path": "public/app.js", "op": "modify" },
+                { "path": "src/routes/users.js", "op": "modify" },
+                { "path": "src/models/user.js", "op": "modify" },
+                { "path": "src/jobs/reminders.js", "op": "modify" },
+                { "path": "test/reminders.test.js", "op": "modify" }
+              ],
+              "acceptance": [
+                "Uncheck the box, then reload the page: it stays unchecked",
+                "A user with `email_reminders = 0` no longer receives any reminder"
+              ],
+              "verify": ["npm test"],
+              "after": ["D1/job"]
+            }
+          ],
+          "depends_on": ["D5"]
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "section": "4 · Shipping",
+      "title": "Shipping safely",
+      "intro": "How to test the emails, in what order to ship, and how to open reminders up to users.",
+      "visual": { "kind": "file_tree", "from_tasks": true, "caption": "Files touched, based on the answers" },
+      "decisions": [
+        {
+          "id": "D11",
+          "title": "How to test emails without sending any",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Without automated tests, a regression sends wrong reminders to real users, and an email can't be unsent. The choice also sets what a developer has to install to work on the emails.",
+          "proposal": "In `npm test`, a test mailer that keeps messages in memory. In development, **Mailpit**: a fake local SMTP server with a web inbox at `localhost:8025`.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "memory-mailpit",
+                "label": "In-memory mailer, plus Mailpit in dev",
+                "recommended": true,
+                "pros": ["Fast tests with no network", "Real rendering visible locally before production"],
+                "cons": ["Mailpit to install (a single binary or Docker)"],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "mailpit",
+                    "title": "Mailpit for development",
+                    "do": "Document `SMTP_HOST=localhost` and `SMTP_PORT=1025` in `.env.example`; add an `npm run mail:dev` script that starts `mailpit`.",
+                    "files": [{ "path": ".env.example", "op": "modify" }, { "path": "package.json", "op": "modify" }],
+                    "acceptance": ["With Mailpit running, an email sent in dev shows up at http://localhost:8025"],
+                    "after": ["D5/mailer"]
+                  }
+                ]
+              },
+              {
+                "id": "memory",
+                "label": "In-memory mailer only",
+                "pros": ["Nothing to install"],
+                "cons": ["The HTML rendering is only seen in production"],
+                "effort": "S"
+              },
+              {
+                "id": "sandbox",
+                "label": "Provider's sandbox",
+                "pros": ["The real path, headers and DKIM included"],
+                "cons": ["Network access and an API key needed in CI", "Slow tests, sometimes flaky"],
+                "effort": "M",
+                "tasks": [
+                  {
+                    "id": "sandbox-test",
+                    "title": "Integration test against the sandbox",
+                    "do": "`test/integration/mail.sandbox.test.js` sends a reminder to the provider's sandbox and checks through the API that it arrived; skipped when `MAIL_SANDBOX_KEY` is not set.",
+                    "files": [{ "path": "test/integration/mail.sandbox.test.js", "op": "create" }],
+                    "acceptance": ["Without `MAIL_SANDBOX_KEY`, the test is skipped and `npm test` passes offline"],
+                    "verify": ["npm test"],
+                    "after": ["D5/mailer"]
+                  }
+                ]
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "test-mailer",
+              "title": "In-memory test mailer",
+              "do": "`test/helpers/mailer.js`: `createTestMailer()` has the same interface as `createMailer` and keeps messages in `sent`. The job and template tests use it.",
+              "files": [{ "path": "test/helpers/mailer.js", "op": "create" }],
+              "acceptance": [
+                "No test connects to an SMTP server: `npm test` passes offline",
+                "`sent` holds the `to`, `subject`, `text`, `html` and headers of each message"
+              ],
+              "verify": ["npm test"]
+            }
+          ]
+        },
+        {
+          "id": "D12",
+          "title": "What order to ship in",
+          "importance": "important",
+          "why": "The order decides what can be shown early and what has to wait. Scheduling before sending lets us measure real volumes without sending anything; sending first lets us test deliverability sooner.",
+          "proposal": "Data, then sending, then scheduling, then rollout. Each phase can be tested on its own, and no email reaches a user before the last one.",
+          "visual": { "kind": "timeline" },
+          "control": { "kind": "order", "source": "phases" }
+        },
+        {
+          "id": "D13",
+          "title": "How to open reminders up to users",
+          "importance": "important",
+          "phase": "p4",
+          "why": "An email can't be unsent: a duplicate or a wrong time zone hits everyone who received it. Starting with a small group limits the damage of a bug and gives us a week of real numbers before opening up to everyone.",
+          "proposal": "A `REMINDERS_ENABLED` flag, off by default, and a list of 50 pilot users (the team and volunteers) for one week. Then everyone, by emptying the list.",
+          "visual": {
+            "kind": "risk_matrix",
+            "risks": [
+              {
+                "id": "R1",
+                "label": "Duplicate reminder sent",
+                "likelihood": 2,
+                "impact": 3,
+                "mitigation": "Unique-key claim (D3) and a double-run test"
+              },
+              {
+                "id": "R2",
+                "label": "Reminders flagged as spam",
+                "likelihood": 2,
+                "impact": 3,
+                "mitigation": "SPF, DKIM and DMARC (D5), one-click unsubscribe (D10)"
+              },
+              {
+                "id": "R3",
+                "label": "Reminder at the wrong time",
+                "likelihood": 2,
+                "impact": 2,
+                "mitigation": "Per-user time zone (D2), pilots across several time zones"
+              },
+              {
+                "id": "R4",
+                "label": "SMTP relay down",
+                "likelihood": 1,
+                "impact": 2,
+                "mitigation": "Claim released: the next run retries (D3)"
+              },
+              {
+                "id": "R5",
+                "label": "Task title injected into the HTML",
+                "likelihood": 1,
+                "impact": 3,
+                "mitigation": "`escapeHtml` and a dedicated test (D6)"
+              }
+            ]
+          },
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "pilot",
+                "label": "Flag and 50 pilots, then everyone",
+                "recommended": true,
+                "pros": ["A bug only affects 50 people", "A week of real numbers before opening up"],
+                "cons": ["One more week before everyone benefits", "A pilot list to maintain"],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "pilot-list",
+                    "title": "Pilot user list",
+                    "do": "`REMINDERS_PILOT_USER_IDS` (comma-separated ids) in `src/config.js` and `.env.example`. While the list is not empty, `runReminders` skips every other user.",
+                    "files": [
+                      { "path": "src/config.js", "op": "modify" },
+                      { "path": ".env.example", "op": "modify" },
+                      { "path": "src/jobs/reminders.js", "op": "modify" },
+                      { "path": "test/reminders.test.js", "op": "modify" }
+                    ],
+                    "acceptance": [
+                      "With `REMINDERS_PILOT_USER_IDS=1,2`, only users 1 and 2 receive reminders",
+                      "Empty list: every user who hasn't turned reminders off receives them"
+                    ],
+                    "verify": ["node --test test/reminders.test.js"],
+                    "after": ["D1/job"]
+                  }
+                ]
+              },
+              {
+                "id": "all",
+                "label": "Flag, then everyone at once",
+                "pros": ["Everyone benefits on release day", "Nothing to keep up to date"],
+                "cons": ["A bug hits 1,200 people at once"],
+                "effort": "S"
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "flag",
+              "title": "REMINDERS_ENABLED flag",
+              "phase": "p3",
+              "do": "`config.reminders.enabled` is `true` only if `REMINDERS_ENABLED=true`: off by default, including in production. Document it in `.env.example`.",
+              "files": [{ "path": "src/config.js", "op": "modify" }, { "path": ".env.example", "op": "modify" }],
+              "acceptance": [
+                "With no variable set, no run is scheduled",
+                "Setting the variable to `false` and restarting stops all sending"
+              ],
+              "verify": ["npm test"]
+            }
+          ],
+          "depends_on": ["D1"]
+        },
+        {
+          "id": "D14",
+          "title": "What the job writes to the logs",
+          "importance": "minor",
+          "phase": "p4",
+          "why": "Without a trace, there is no way to answer “I didn't get my reminder”; with too much detail, the logs fill up with email addresses.",
+          "proposal": "One JSON line per run (`examined`, `sent`, `failed`, duration) and one line per failure with the task id and the error code, never the email address.",
+          "tasks": [
+            {
+              "id": "log",
+              "title": "Log a summary of each run",
+              "do": "At the end of `runReminders`, write `console.info(JSON.stringify({ event: 'reminders.run', examined, sent, failed, ms }))`; for each failure, a `{ event: 'reminders.failed', taskId, code }` line.",
+              "acceptance": [
+                "Each run writes exactly one `reminders.run` line",
+                "No log line contains the `@` character"
+              ],
+              "verify": ["node --test test/reminders.test.js"],
+              "after": ["D1/job"],
+              "files": [
+                { "path": "src/jobs/reminders.js", "op": "modify" },
+                { "path": "test/reminders.test.js", "op": "modify" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

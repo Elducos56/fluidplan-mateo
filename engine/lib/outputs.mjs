@@ -1,0 +1,52 @@
+// Writes PLAN.md and DECISIONS.md; shared by the server and the CLI.
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { outputPaths } from "./config.mjs";
+import { readJson, toPosix, writeAtomic } from "./fsutil.mjs";
+import { loadAnswers, loadPlan, loadState, planFiles } from "./plans.mjs";
+import { buildDecisionsMd } from "../public/js/export_decisions.js";
+import { buildPlanMd } from "../public/js/export_plan.js";
+import { makeT } from "../public/js/i18n.js";
+
+const I18N = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "i18n");
+const dicts = new Map();
+
+export function langOf(plan, config) {
+  return ["fr", "en"].includes(plan.lang) ? plan.lang : config.lang;
+}
+
+export function translator(lang) {
+  if (!dicts.has(lang)) dicts.set(lang, JSON.parse(readFileSync(path.join(I18N, `${lang}.json`), "utf8")));
+  return makeT(dicts.get(lang), lang);
+}
+
+// Answers from the rounds already sent, for the DECISIONS.md history. The current round is read
+// from answers.json: its archive, if it already exists, holds the same thing.
+export async function loadHistory(config, id, state) {
+  const files = planFiles(config, id);
+  const out = [];
+  for (let round = 1; round < state.round; round += 1) {
+    const file = path.join(files.round(round), "answers.json");
+    if (existsSync(file)) out.push({ round, answers: await readJson(file, {}) });
+  }
+  return out;
+}
+
+export async function writeOutputs(config, id, { now = new Date() } = {}) {
+  const plan = await loadPlan(config, id);
+  const answers = await loadAnswers(config, id);
+  const state = await loadState(config, id);
+  const t = translator(langOf(plan, config));
+  const history = await loadHistory(config, id, state);
+  const targets = outputPaths(config, plan);
+  const planMd = buildPlanMd(plan, answers, { t, now, state });
+  const decisionsMd = buildDecisionsMd(plan, answers, { t, now, state, history });
+  await writeAtomic(targets.plan, planMd);
+  await writeAtomic(targets.decisions, decisionsMd);
+  const rel = (file) => toPosix(path.relative(config.root, file));
+  return {
+    plan: { path: rel(targets.plan), bytes: Buffer.byteLength(planMd) },
+    decisions: { path: rel(targets.decisions), bytes: Buffer.byteLength(decisionsMd) },
+  };
+}

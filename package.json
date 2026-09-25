@@ -1,0 +1,33 @@
+{
+  "name": "fluidplan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Claude Code skill that turns a plan into a small local web app: settle each decision, let Claude revise round after round, get a PLAN.md ready to execute.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skill",
+    "planning",
+    "decisions",
+    "shadcn"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/morganhub/fluidplan.git"
+  },
+  "type": "module",
+  "bin": {
+    "fluidplan": "engine/fluidplan.mjs"
+  },
+  "scripts": {
+    "check": "node engine/fluidplan.mjs check --root examples/tech-feature && node engine/fluidplan.mjs check --plans test/fixtures/plans",
+    "test": "npm run unit && node test/smoke.mjs",
+    "unit": "node --test \"test/unit/*.test.mjs\"",
+    "smoke": "node test/smoke.mjs",
+    "screenshots": "node scripts/readme-screenshots.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

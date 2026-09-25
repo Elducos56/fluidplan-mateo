@@ -1,0 +1,20 @@
+{
+  "name": "tasklet",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Minimal task manager: Express API, SQLite, framework-free front end.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/migrate.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0"
+  }
+}

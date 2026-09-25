@@ -1,0 +1,25 @@
+node_modules/
+*.tmp
+.claude/
+
+# Image service keys
+engine/.env
+
+# Local runs: a plan's answers, rounds, generated files and server info
+.fluidplan/
+examples/*/plans/*/answers.json
+examples/*/plans/*/state.json
+examples/*/plans/*/images.json
+examples/*/plans/*/rounds/
+examples/*/plans/*/assets/generated/
+examples/*/plans/*/PLAN.md
+examples/*/plans/*/DECISIONS.md
+examples/*/plans/.server.json
+test/fixtures/plans/*/answers.json
+test/fixtures/plans/*/state.json
+test/fixtures/plans/*/images.json
+test/fixtures/plans/*/rounds/
+test/fixtures/plans/.server.json
+
+# Local marketing material, not published
+social/

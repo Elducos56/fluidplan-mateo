@@ -1,0 +1,43 @@
+{
+  "$schema": "../../engine/schema/plan.schema.json",
+  "version": 2,
+  "id": "",
+  "title": "",
+  "subtitle": "",
+  "lang": "en",
+  "accent": "neutral",
+  "source": { "kind": "request" },
+  "context": "The request in two or three sentences, the scope, what already exists.",
+  "phases": [
+    { "id": "p1", "title": "First phase", "estimate": "≈ 1 d", "days": 1 }
+  ],
+  "glossary": [],
+  "pages": [
+    {
+      "id": "theme-1",
+      "section": "1 · First theme",
+      "title": "Page title",
+      "intro": "What this page asks you to decide, in one sentence.",
+      "decisions": [
+        {
+          "id": "D1",
+          "title": "A decision that can be settled on its own",
+          "importance": "important",
+          "phase": "p1",
+          "why": "Why it matters: the context, and what a mistake would cost.",
+          "proposal": "What is proposed, in plain words.",
+          "tasks": [
+            {
+              "id": "t1",
+              "title": "First task",
+              "do": "What to do, concretely.",
+              "files": [{ "path": "src/example.js", "op": "create" }],
+              "acceptance": ["A verifiable criterion"],
+              "verify": ["npm test"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

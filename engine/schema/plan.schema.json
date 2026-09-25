@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fluidplan/plan.schema.json",
+  "title": "fluidplan plan (v2)",
+  "description": "A plan split into pages (themes) and decisions to settle. Each decision explains why it matters, offers options with their pros and cons, and carries the tasks that follow from it: the answers become PLAN.md (to execute) and DECISIONS.md (the why). Readable reference: references/schema.md.",
+  "type": "object",
+  "required": ["version", "id", "title", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 2 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "description": "Name of the plan's folder (.fluidplan/<id>/)." },
+    "title": { "type": "string" },
+    "subtitle": { "type": "string" },
+    "lang": { "enum": ["en", "fr"], "default": "en", "description": "Language of the interface and the exports; the plan's content is written in this language." },
+    "accent": { "enum": ["neutral", "blue", "green", "orange", "rose", "violet", "yellow"], "default": "neutral", "description": "Main color (shadcn preset)." },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["md", "txt", "docx", "pdf", "request"] },
+        "path": { "type": ["string", "null"], "description": "Original document, relative to the project root." }
+      }
+    },
+    "context": { "$ref": "#/$defs/markdown", "description": "The request, the scope, what already exists: shown on the home page and at the top of the outputs." },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan": { "type": "string", "pattern": "\\.md$" },
+        "decisions": { "type": "string", "pattern": "\\.md$" }
+      },
+      "description": "Output paths, relative to the project root (default: the plan's folder)."
+    },
+    "phases": {
+      "type": "array",
+      "description": "The project's phases: PLAN.md groups the tasks by phase, in the chosen order.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "title": { "type": "string" },
+          "short": { "type": "string", "description": "Short name for badges." },
+          "estimate": { "type": "string" },
+          "cost": { "type": "string" },
+          "days": { "type": "number", "description": "Duration, for the timeline and bars visuals." }
+        }
+      }
+    },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["term", "definition"],
+        "additionalProperties": false,
+        "properties": {
+          "term": { "type": "string" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "definition": { "type": "string" }
+        }
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^visuals/[\\w.-]+\\.m?js$" },
+      "description": "Plan-specific visuals (modules { kind, render, validate?, css? }); see references/visuals.md."
+    },
+    "x": { "type": "object", "description": "Free-form settings for extensions." },
+    "pages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/page" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$" },
+    "markdown": { "type": "string", "description": "Minimal Markdown: paragraphs, \"-\" and \"1.\" lists, **bold**, *italic*, `code`, [links](https://…), ``` blocks." },
+    "page": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "section": { "type": "string", "description": "Sidebar group (the theme or part)." },
+        "title": { "type": "string" },
+        "intro": { "$ref": "#/$defs/markdown" },
+        "visual": { "$ref": "#/$defs/visual" },
+        "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "importance": { "enum": ["critical", "important", "minor"], "default": "important" },
+        "phase": { "$ref": "#/$defs/id" },
+        "why": { "$ref": "#/$defs/markdown", "description": "Why it matters: the context and what a mistake would cost. Required if critical." },
+        "proposal": { "$ref": "#/$defs/markdown" },
+        "learn_more": { "$ref": "#/$defs/markdown", "description": "Long explanation, collapsed by default." },
+        "question": { "type": "integer", "description": "Number of the open question in the source document." },
+        "facts": {
+          "type": "array",
+          "items": { "type": "object", "required": ["label", "value"], "additionalProperties": false, "properties": { "label": { "type": "string" }, "value": { "type": "string" } } }
+        },
+        "visual": { "$ref": "#/$defs/visual" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/item" }, "description": "Items reviewed one by one; excludes \"control\"." },
+        "control": { "$ref": "#/$defs/control" },
+        "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } },
+        "depends_on": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "source_ref": { "type": "string", "description": "Where it is in the source (section, page)." },
+        "revision": {
+          "type": "object",
+          "required": ["round", "note"],
+          "additionalProperties": false,
+          "properties": {
+            "round": { "type": "integer", "minimum": 2, "description": "Round that presents this revised version." },
+            "note": { "type": "string", "description": "What changed, addressed to the person." }
+          }
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "tag": { "type": "string" },
+        "detail": { "$ref": "#/$defs/markdown" },
+        "icon": { "type": "string", "description": "Plan file (assets/…) or \"lucide:<name>\"." },
+        "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } },
+        "node": { "type": "object", "description": "Free-form settings for an extension (e.g. a talent tree)." }
+      }
+    },
+    "option": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string" },
+        "detail": { "type": "string" },
+        "recommended": { "type": "boolean" },
+        "pros": { "type": "array", "items": { "type": "string" } },
+        "cons": { "type": "array", "items": { "type": "string" } },
+        "effort": { "type": "string", "description": "S, M, L… or a duration." },
+        "cost": { "type": "string" },
+        "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" }, "description": "Tasks added if this option is chosen." }
+      }
+    },
+    "control": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["choice", "multi", "number", "order"] },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/option" }, "description": "choice / multi. \"Another option\" is always added to choices." },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number" },
+        "default": { "type": "number" },
+        "unit": { "type": "string" },
+        "source": { "const": "phases", "description": "order: the phases are ordered." }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "description": "Templates: {{value}}, {{unit}}, {{choice.label}}, {{choice.id}}, {{choices}}." },
+        "do": { "$ref": "#/$defs/markdown" },
+        "phase": { "$ref": "#/$defs/id", "description": "Defaults to the decision's phase." },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": { "path": { "type": "string" }, "op": { "enum": ["create", "modify", "delete"], "default": "modify" } }
+          }
+        },
+        "acceptance": { "type": "array", "items": { "type": "string" } },
+        "verify": { "type": "array", "items": { "type": "string" }, "description": "Verification commands." },
+        "after": { "type": "array", "items": { "type": "string" }, "description": "Prerequisite tasks: \"<decision>/<task>\", or \"<task>\" within the same decision." }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "required": ["kind"],
+      "description": "See references/visuals.md. Built-in kinds: overview, cards, matrix, bars, tiers, icons, image, timeline, compare, file_tree, risk_matrix, before_after, diagram, code, stats; plus those from extensions.",
+      "properties": {
+        "kind": { "type": "string" },
+        "caption": { "type": "string" },
+        "prompt": { "type": "string", "description": "Description of an illustration to generate (the page's \"Illustrate\" button, or \"fluidplan images generate\"); at most 5 generations per service and per plan." },
+        "aspect": { "enum": ["16:9", "4:3", "1:1", "3:4", "9:16"], "description": "Format of the illustration to generate (default 16:9)." },
+        "transparent": { "type": "boolean", "description": "Transparent background (OpenAI, Meshy)." },
+        "alt": { "type": "string" }
+      }
+    }
+  }
+}

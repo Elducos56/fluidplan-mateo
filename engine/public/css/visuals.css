@@ -1,0 +1,182 @@
+/* Built-in visuals. Thin marks, rounded data ends (4 px), subtle hairline grids, text in text
+   colors (never the series color). */
+
+.chart-table { margin-top: 0.25rem; }
+.chart-table > summary { font-size: 0.8125rem; color: var(--muted-foreground); padding: 0.375rem 0; }
+.v-note { font-size: 0.8125rem; }
+
+/* --- tiles, cards, icons, image ------------------------------------------------------------------- */
+.v-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
+.v-tile {
+  display: grid; gap: 0.375rem; align-content: start; text-align: left;
+  padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: inherit; font: inherit;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+button.v-tile:hover { background: var(--accent); }
+.v-tile-media img, .v-tile-media .icon { width: 2.5rem; height: 2.5rem; object-fit: contain; }
+.v-tile .muted { font-size: 0.8125rem; }
+.v-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem; }
+.v-card { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: start; padding: 0.875rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.v-card-media img, .v-card-media .icon { width: 2.75rem; height: 2.75rem; object-fit: contain; }
+.v-card p { margin-top: 0.25rem; font-size: 0.8125rem; }
+.v-icons { display: flex; flex-wrap: wrap; gap: 1rem; }
+.v-icons figure { display: grid; justify-items: center; gap: 0.375rem; margin: 0; width: 5.5rem; text-align: center; font-size: 0.75rem; color: var(--muted-foreground); }
+.v-icons img, .v-icons .icon { width: 3rem; height: 3rem; object-fit: contain; }
+.v-image { margin: 0; display: grid; gap: 0.5rem; }
+.v-image img { width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border); }
+.v-image figcaption { font-size: 0.8125rem; }
+
+/* --- tiers, matrix ------------------------------------------------------------------------------- */
+.v-tiers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem 1.5rem; }
+.v-tier { display: grid; justify-items: center; gap: 0.25rem; min-width: 4.5rem; text-align: center; }
+.v-tier-media { display: grid; place-items: end center; min-height: 3.75rem; }
+.v-tier-media img, .v-tier-media .icon { width: var(--size, 3rem); height: var(--size, 3rem); object-fit: contain; }
+.v-tier-label { font-size: 0.8125rem; font-weight: 500; }
+.v-tier-value { font-size: 0.75rem; }
+.v-matrix th, .v-matrix td { vertical-align: top; }
+.v-matrix-head { display: inline-flex; align-items: center; gap: 0.5rem; }
+.v-matrix-head img, .v-matrix-head .icon { width: 1.75rem; height: 1.75rem; object-fit: contain; }
+.v-matrix-cell { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem; min-width: 10rem; font-size: 0.8125rem; }
+.v-matrix-cell img, .v-matrix-cell .icon { width: 1.75rem; height: 1.75rem; object-fit: contain; }
+
+/* --- bars ----------------------------------------------------------------------------------------- */
+.v-bars { display: grid; gap: 0.75rem; }
+.v-bar-list { display: grid; gap: 0.625rem; }
+.v-bar-row { display: grid; grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr); gap: 0.75rem; align-items: center; border-radius: var(--radius-sm); }
+.v-bar-label { font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v-bar-track { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.v-bar-fill { height: 0.875rem; min-width: 2px; background: var(--chart-1); border-radius: 0 4px 4px 0; transition: width 0.3s; flex-shrink: 0; max-width: calc(100% - 4.5rem); }
+.v-bar-value { font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--foreground); white-space: nowrap; }
+.v-bar-total { display: flex; justify-content: space-between; gap: 1rem; padding-top: 0.625rem; border-top: 1px solid var(--border); font-size: 0.875rem; }
+
+/* --- phase timeline -------------------------------------------------------------------------------- */
+.v-timeline { display: grid; gap: 0.5rem; }
+.v-tl-rows { display: grid; gap: 0.5rem; }
+.v-tl-row, .v-tl-axis { display: grid; grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr) minmax(4rem, auto); gap: 0.75rem; align-items: center; }
+.v-tl-row { border-radius: var(--radius-sm); }
+.v-tl-label { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-size: 0.8125rem; }
+.v-tl-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v-tl-track { position: relative; height: 1.25rem; border-left: 1px solid var(--border); }
+.v-tl-bar { position: absolute; top: 0.1875rem; height: 0.875rem; background: var(--chart-1); border-radius: 4px; transition: left 0.3s, width 0.3s; }
+.v-tl-bar::after { content: ""; position: absolute; inset: 0 -1px 0 auto; width: 2px; background: var(--card); }
+.v-tl-meta { font-size: 0.75rem; text-align: right; white-space: nowrap; }
+.v-tl-ticks { position: relative; height: 1.25rem; border-top: 1px solid var(--border); }
+.v-tl-ticks span { position: absolute; top: 0.25rem; transform: translateX(-50%); font-size: 0.6875rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.v-tl-ticks span:first-child { transform: none; }
+.v-tl-ticks span:last-child { transform: translateX(-100%); }
+.v-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.v-steps li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.625rem; align-items: start; margin: 0; }
+.v-step-rank { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; flex-shrink: 0; border-radius: 999px; background: var(--muted); color: var(--foreground); font-size: 0.75rem; font-weight: 600; }
+.v-step-title { font-weight: 500; }
+
+/* --- risk matrix ------------------------------------------------------------------------------------- */
+.v-risk { display: grid; gap: 1rem; }
+.v-rm-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; gap: 0.5rem; max-width: 32rem; }
+.v-rm-ylabel { grid-row: 1; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-size: 0.75rem; color: var(--muted-foreground); }
+.v-rm-xlabel { grid-column: 2; text-align: center; font-size: 0.75rem; color: var(--muted-foreground); }
+.v-rm-grid { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 2px; }
+.v-rm-axis-y { display: grid; align-items: center; padding-right: 0.5rem; font-size: 0.75rem; color: var(--muted-foreground); text-align: right; }
+.v-rm-axis-x { text-align: center; font-size: 0.75rem; color: var(--muted-foreground); padding-top: 0.25rem; }
+.v-rm-cell { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 0.25rem; min-height: 4rem; padding: 0.375rem; border-radius: 4px; }
+.v-rm-cell.sev-low { background: var(--muted); }
+.v-rm-cell.sev-medium { background: color-mix(in oklab, var(--warning) 22%, var(--card)); }
+.v-rm-cell.sev-high { background: color-mix(in oklab, var(--destructive) 22%, var(--card)); }
+.v-rm-marker {
+  display: inline-grid; place-items: center; width: 1.625rem; height: 1.625rem; padding: 0;
+  border: 2px solid var(--card); border-radius: 999px; background: var(--foreground); color: var(--background);
+  font-size: 0.75rem; font-weight: 600;
+}
+.v-rm-marker.static { flex-shrink: 0; }
+.v-rm-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.75rem; color: var(--muted-foreground); }
+.v-rm-key { display: inline-flex; align-items: center; gap: 0.375rem; }
+.v-rm-key.sev-medium .icon { color: var(--warning); }
+.v-rm-key.sev-high .icon { color: var(--destructive); }
+.v-rm-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.625rem; }
+.v-rm-list li { display: grid; grid-template-columns: 1.625rem 1fr; gap: 0.625rem; margin: 0; font-size: 0.8125rem; }
+.v-rm-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-weight: 500; font-size: 0.875rem; }
+
+/* --- diagram --------------------------------------------------------------------------------------- */
+.v-diagram-wrap { overflow-x: auto; }
+.v-diagram { width: 100%; height: auto; margin: 0 auto; }
+.v-dg-node rect { fill: var(--card); stroke: var(--border); stroke-width: 1; }
+.v-dg-node.tone-primary rect { stroke: var(--primary); stroke-width: 1.5; }
+.v-dg-node.tone-muted rect { fill: var(--muted); }
+.v-dg-node.tone-success rect { stroke: var(--success); fill: color-mix(in oklab, var(--success) 8%, var(--card)); }
+.v-dg-node.tone-warning rect { stroke: var(--warning); fill: color-mix(in oklab, var(--warning) 8%, var(--card)); }
+.v-dg-node.tone-danger rect { stroke: var(--destructive); fill: color-mix(in oklab, var(--destructive) 8%, var(--card)); }
+.v-dg-label { fill: var(--foreground); font-size: 12.5px; font-weight: 500; }
+.v-dg-sub { fill: var(--muted-foreground); font-size: 11px; }
+.v-dg-edge { fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; }
+.v-dg-edge.dashed { stroke-dasharray: 4 4; }
+.v-dg-arrow { fill: var(--muted-foreground); }
+.v-dg-edge-bg { fill: var(--card); }
+.v-dg-edge-label { fill: var(--muted-foreground); font-size: 11px; }
+
+/* --- code, before / after, files --------------------------------------------------------------------- */
+.v-code { margin: 0; display: grid; gap: 0.5rem; }
+.v-code figcaption { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.8125rem; color: var(--muted-foreground); }
+.v-code pre { padding: 0.75rem 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--muted) 50%, transparent); }
+.v-code code { background: none; padding: 0; display: block; }
+.v-code-line { display: block; padding: 0 1rem 0 0; white-space: pre; }
+.v-code-line.marked { background: color-mix(in oklab, var(--warning) 14%, transparent); box-shadow: inset 2px 0 0 var(--warning); }
+.v-code-num { display: inline-block; width: 3rem; padding-right: 1rem; text-align: right; color: var(--muted-foreground); user-select: none; }
+.v-before-after { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.75rem; align-items: center; }
+.v-ba-pane { display: grid; gap: 0.5rem; align-content: start; height: 100%; padding: 0.875rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.v-ba-pane.after { border-color: color-mix(in oklab, var(--success) 40%, var(--border)); }
+.v-ba-title { display: flex; align-items: center; gap: 0.375rem; font-weight: 500; font-size: 0.8125rem; }
+.v-ba-pane.before .v-ba-title .icon { color: var(--muted-foreground); }
+.v-ba-pane.after .v-ba-title .icon { color: var(--success); }
+.v-ba-pane img { border-radius: var(--radius-md); }
+.v-ba-arrow { color: var(--muted-foreground); }
+.v-file-tree { font-size: 0.8125rem; }
+.v-file-tree ul { list-style: none; margin: 0; padding-left: 1.125rem; border-left: 1px solid var(--border); }
+.v-file-tree > ul { padding-left: 0; border-left: 0; }
+.v-file-tree li { margin: 0.25rem 0; }
+.v-ft-dir, .v-ft-file { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; }
+.v-ft-dir { font-family: var(--font-mono); color: var(--muted-foreground); }
+.v-ft-file.op-create > .icon { color: var(--success); }
+.v-ft-file.op-modify > .icon { color: var(--info); }
+.v-ft-file.op-delete > .icon { color: var(--destructive); }
+.v-ft-tasks { font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.v-stat-sub { font-size: 0.75rem; }
+
+@media (max-width: 768px) {
+  .v-bar-row, .v-tl-row, .v-tl-axis { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  .v-tl-meta { text-align: left; }
+  .v-tl-axis > div:first-child, .v-tl-axis > div:last-child { display: none; }
+  .v-before-after { grid-template-columns: minmax(0, 1fr); }
+  .v-ba-arrow { transform: rotate(90deg); justify-self: center; }
+}
+
+/* --- generated illustrations ----------------------------------------------------------------------- */
+.illustration { min-width: 0; }
+.illustration-figure { margin: 0; display: grid; gap: 0.5rem; }
+.illustration-figure > img { width: 100%; max-height: 28rem; object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--muted); }
+.illustration-figure figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.75rem; }
+.illustration-versions { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.illustration-thumb { width: 2.25rem; height: 2.25rem; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--muted); overflow: hidden; }
+.illustration-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.illustration-thumb[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.illustration-figure figcaption .btn { margin-left: auto; }
+.illustration-empty {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center;
+  padding: 0.875rem 1rem; border: 1px dashed var(--border); border-radius: var(--radius-lg); color: var(--muted-foreground);
+}
+.illustration-title { font-weight: 500; color: var(--foreground); font-size: 0.875rem; }
+.illustration-prompt { font-size: 0.8125rem; font-style: italic; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.illustration-reason { font-size: 0.75rem; margin-top: 0.25rem; }
+.images-form { display: grid; gap: 1rem; }
+.provider-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.5rem; }
+.provider-option { padding: 0.75rem; }
+.provider-option .rc-body { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; font-family: var(--font-mono); font-size: 0.75rem; }
+.provider-option .rc-body .badge { font-family: var(--font-sans); }
+.radio-card.disabled { opacity: 0.55; cursor: not-allowed; }
+.radio-card.disabled:hover { background: var(--card); }
+.images-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; }
+.images-row .field { min-width: 11rem; }
+.images-check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; padding-bottom: 0.5rem; }
+.images-progress { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+@media (max-width: 768px) {
+  .illustration-empty { grid-template-columns: auto minmax(0, 1fr); }
+  .illustration-empty > .btn { grid-column: 1 / -1; justify-self: start; }
+}
