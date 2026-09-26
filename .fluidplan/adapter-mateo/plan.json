@@ -1146,8 +1146,8 @@
           "title": "Les illustrations payantes restent inertes",
           "importance": "minor",
           "phase": "p1",
-          "why": "Elles ne s'affichent qu'avec une clé de service d'images. Tu n'en as aucune : le code ne fait donc aucun appel réseau.",
-          "proposal": "On ne supprime pas ce code, pour garder l'écart minimal. Aucune clé n'est ajoutée.",
+          "why": "Ton abonnement ChatGPT ne peut pas servir ici. La connexion ChatGPT de Codex ne marche que pour Codex, et OpenAI facture toute autre utilisation par une clé API séparée, au tarif normal.",
+          "proposal": "On garde les illustrations **inertes**, sans clé : les schémas intégrés acceptés en B3 couvrent ton besoin de comprendre par l'image. Si tu veux un jour des images, la voie documentée est une clé API OpenAI séparée, payée à l'usage.",
           "tasks": [
             {
               "id": "noter",
@@ -1169,7 +1169,12 @@
                 "git diff --stat 755d1b2"
               ]
             }
-          ]
+          ],
+          "learn_more": "Ce que dit la doc, vérifiée le 26/09/2026 :\n\n- Doc Codex, page « Authentication » (learn.chatgpt.com/docs/auth) : la connexion ChatGPT donne accès aux fonctions de Codex. Une clé API « uses standard API pricing instead of included ChatGPT plan credits ».\n- Centre d'aide OpenAI, « Managing billing for ChatGPT and the API platform » : ChatGPT et l'API ont deux facturations séparées ; l'abonnement ne couvre pas les appels à l'API.\n\nRéutiliser la connexion de Codex dans fluidplan serait un détournement non documenté : je ne le propose pas.\n\nNon vérifié : une offre gratuite pour générer des images chez un des services pris en charge (OpenAI, Gemini, Ludo.ai, Meshy). Je n'en ai trouvé aucune confirmée dans la doc.",
+          "revision": {
+            "round": 3,
+            "note": "J'ai vérifié : ton abonnement ChatGPT ne donne pas accès à l'API d'images, la connexion ChatGPT ne sert qu'à Codex. Je recommande de garder les illustrations inertes, puisque les schémas de B3 suffisent, et de prendre une clé API séparée seulement si tu veux un jour des images."
+          }
         }
       ]
     }
