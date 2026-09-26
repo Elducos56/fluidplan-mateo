@@ -1,7 +1,7 @@
 // The plan's answers: read, changed, saved as you go (half a second after the last keystroke).
 // Listeners receive the id of the decision touched. When read-only (round sent, plan finalized),
 // no change goes through.
-import { allDecisions, itemVerdict, verdict } from "./model.js";
+import { allDecisions, importanceOf, itemVerdict, verdict } from "./model.js";
 
 const SAVE_DELAY_MS = 500;
 
@@ -55,6 +55,43 @@ export class Store {
       changes.status = "modify";
     }
     this.patch(id, changes);
+  }
+
+  // "Everything as recommended": what one click would accept. A card counts when nothing has been
+  // said on it yet (no status, or items without a status); a card already answered, or being
+  // changed, is left alone. Critical cards are skipped unless asked otherwise.
+  recommendable({ skipCritical = true } = {}) {
+    const accept = [];
+    const critical = [];
+    for (const { decision } of this.entries.values()) {
+      const answer = this.answer(decision.id);
+      if (verdict(decision, answer) !== "pending") continue;
+      const untouched = decision.items?.length
+        ? answer.status !== "explain" && decision.items.some((item) => !answer.items?.[item.id]?.status)
+        : !answer.status;
+      if (!untouched) continue;
+      if (skipCritical && importanceOf(decision) === "critical") critical.push(decision.id);
+      else accept.push(decision.id);
+    }
+    return { accept, critical };
+  }
+
+  // Accepting without touching the control keeps the recommended option, the default value and
+  // the declared order: setting the status to "ok" is enough.
+  acceptRecommended({ skipCritical = true } = {}) {
+    if (this.readOnly) return [];
+    const { accept } = this.recommendable({ skipCritical });
+    for (const id of accept) {
+      const decision = this.decision(id);
+      if (decision.items?.length) {
+        const items = { ...(this.answer(id).items ?? {}) };
+        for (const item of decision.items) if (!items[item.id]?.status) items[item.id] = { ...(items[item.id] ?? {}), status: "ok" };
+        this.patch(id, { items });
+      } else {
+        this.patch(id, { status: "ok" });
+      }
+    }
+    return accept;
   }
 
   verdict(id) {

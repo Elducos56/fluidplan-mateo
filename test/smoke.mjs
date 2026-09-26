@@ -46,7 +46,7 @@ const cli = (...args) => execFileSync(process.execPath, [CLI, ...args, "--root",
 const port = 5600 + Math.floor(Math.random() * 300);
 const server = spawn(process.execPath, [CLI, "serve", "--root", root, "--port", String(port)], {
   stdio: "ignore",
-  env: { ...process.env, FLUIDPLAN_ENV_FILE: "none", FLUIDPLAN_FAKE_IMAGES: "1", GEMINI_API_KEY: "simulated" },
+  env: { ...process.env, FLUIDPLAN_ENV_FILE: "none", FLUIDPLAN_FAKE_IMAGES: "1", FLUIDPLAN_IMAGES_FROM_ENV: "1", OPENAI_API_KEY: "", LUDO_API_KEY: "", MESHY_API_KEY: "", GEMINI_API_KEY: "simulated" },
 });
 const base = `http://127.0.0.1:${port}`;
 for (let i = 0; i < 50; i += 1) {

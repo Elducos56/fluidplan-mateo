@@ -13,7 +13,28 @@ export const BUILTIN_VISUALS = [
 ];
 const CONTROL_KINDS = new Set(["choice", "multi", "number", "order"]);
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-const MAX_DECISIONS_PER_PAGE = 6;
+const MAX_DECISIONS_PER_PAGE = 4;
+// Readability limits that hold whatever writing style the session uses: they come from the
+// authoring rule "a proposal in two to four sentences".
+const MAX_PROPOSAL_SENTENCES = 4;
+const MAX_SENTENCE_WORDS = 30;
+// Words Mateo already knows: defining them in the glossary talks down to him.
+export const KNOWN_FR = ["dépôt", "ticket", "adr", "vps", "gbrain", "workspace", "pastille", "notion", "hermès", "riffado"];
+
+// Sentences of a Markdown text: code spans, links and list markers removed, split on . ! ? or a line break.
+export function sentencesOf(text) {
+  return String(text ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, "code")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map((s) => s.replace(/^\s*(?:[-*>]|\d+\.)\s+/, "").trim())
+    .filter((s) => /[\p{L}\p{N}]/u.test(s));
+}
+
+function wordCount(sentence) {
+  return sentence.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+}
 
 // options.visualKinds: kinds brought by the loaded extensions; options.looseVisuals: an extension
 // could not be loaded, so an unknown kind is only a warning.
@@ -80,7 +101,7 @@ export function validatePlan(plan, { planDir, root, visualKinds = [], looseVisua
     textBlob.push(page.intro ?? "");
     visual(where, page.visual);
     const main = (page.decisions ?? []).filter((d) => d.importance !== "minor");
-    if (main.length > MAX_DECISIONS_PER_PAGE) warn(where, `${main.length} non-minor decisions: aim for 3 to 5 per page`);
+    if (main.length > MAX_DECISIONS_PER_PAGE) warn(where, `${main.length} non-minor decisions: aim for 3 to ${MAX_DECISIONS_PER_PAGE} per page`);
     for (const decision of page.decisions ?? []) checkDecision(decision);
   });
 
@@ -98,6 +119,11 @@ export function validatePlan(plan, { planDir, root, visualKinds = [], looseVisua
     if (decision.phase && !phases.has(decision.phase)) fail(dw, `unknown phase "${decision.phase}"`);
     for (const dep of decision.depends_on ?? []) references.push([dw, dep]);
     visual(dw, decision.visual);
+    if (importance !== "minor" && !decision.visual) warn(dw, "no visual: a diagram, compare or timeline helps decide");
+    const proposalSentences = sentencesOf(decision.proposal);
+    if (proposalSentences.length > MAX_PROPOSAL_SENTENCES) warn(dw, `proposal of ${proposalSentences.length} sentences: aim for ${MAX_PROPOSAL_SENTENCES} at most`);
+    const long = [...proposalSentences, ...sentencesOf(decision.why)].filter((s) => wordCount(s) > MAX_SENTENCE_WORDS);
+    if (long.length) warn(dw, `${long.length} sentence(s) over ${MAX_SENTENCE_WORDS} words in "why" or "proposal": split them`);
 
     if (decision.items?.length) {
       const ids = new Set();
@@ -192,6 +218,7 @@ export function validatePlan(plan, { planDir, root, visualKinds = [], looseVisua
     }
     if (terms.has(entry.term.toLowerCase())) fail("glossary", `duplicate term "${entry.term}"`);
     terms.add(entry.term.toLowerCase());
+    if (KNOWN_FR.includes(entry.term.toLowerCase())) warn("glossary", `term "${entry.term}" is already known to the reader: remove it from the glossary`);
     const used = [entry.term, ...(entry.aliases ?? [])].some((word) => blob.includes(word.toLowerCase()));
     if (!used) warn("glossary", `term "${entry.term}" never used in the texts`);
   }

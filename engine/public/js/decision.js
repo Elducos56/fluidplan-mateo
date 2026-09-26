@@ -8,7 +8,7 @@ import { illustrationFor } from "./illustration.js";
 import { applyGlossary } from "./glossary.js";
 import { icon } from "./icons.js";
 import { md, plain } from "./md.js";
-import { importanceOf, textOf, verdict } from "./model.js";
+import { importanceOf, readingMinutes, textOf, verdict } from "./model.js";
 import { revisionNotice } from "./revision.js";
 import { accordion, alert, attachFloating, badge } from "./ui.js";
 import { renderVisual } from "./visuals/index.js";
@@ -49,6 +49,7 @@ export function renderDecision(decision, ctx, { compact = false } = {}) {
     badge(decision.id, { variant: "outline", className: "badge-mono" }),
     badge(t(`importance.${importance}`), IMPORTANCE_STYLE[importance]),
     phase ? badge(phase.short ?? phase.title, { variant: "outline", icon: "layers", title: t("decision.phase", { title: phase.title }) }) : null,
+    badge(t("decision.minutes", { n: readingMinutes(decision) }), { variant: "outline", icon: "timer", title: t("decision.minutesTitle") }),
     decision.question ? badge(t("decision.question", { n: decision.question }), { variant: "outline", icon: "message-circle-question" }) : null,
     revised ? badge(t("decision.revised"), { variant: "info", icon: "history" }) : null,
     stateSlot);

@@ -26,9 +26,13 @@ Do not create a decision for:
 
 ## 2. Split into pages
 
-- **One page = one theme**, 3 to 5 non-minor decisions. Above 6, `check` warns: split.
+- **One page = one theme**, 3 to 4 non-minor decisions. Above 4, `check` warns: split.
 - `section` groups pages in the sidebar ("1 · Storage", "2 · Interface").
 - `intro`: one sentence saying what the page asks the person to decide.
+- **Every critical or important decision carries a visual by default** (`decision.visual`): a
+  `diagram` for a mechanism or a flow, `compare` for options side by side, `timeline` for a
+  sequence. `check` warns when one is missing. Skip it only when no picture says anything more
+  than the text; never add a decorative one.
 - A page visual when it helps see the whole: the phase timeline (`timeline`), a diagram
   (`diagram`), the files touched (`file_tree`), the risks (`risk_matrix`) — see `visuals.md`.
 - The home page (context, figures, outline) and the summary page are added by the engine: do not

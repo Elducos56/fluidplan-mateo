@@ -1,7 +1,7 @@
 # PLAN.md and DECISIONS.md
 
 `fluidplan finalize` (or `export`, or the button on the summary page) writes two files, by default
-into `.fluidplan/<id>/` (see `output` in `schema.md`). As long as not everything is settled, they
+into `docs/fluidplan/<id>/` (see `output` in `schema.md`). As long as not everything is settled, they
 carry a **DRAFT** notice at the top.
 
 ## PLAN.md — the plan to execute
@@ -47,6 +47,21 @@ order.
    improvise. Either ask a short question in the conversation, or open a new round: edit
    `plan.json` (`revision` set to the next round) and restart the loop (`serve`, `wait`).
 5. At the end: run the whole "Final check", then summarize what was done.
+
+## After finalizing: DECISIONS.md into the brain inbox
+
+Once `finalize` has written the two files, **offer** the person to file DECISIONS.md in their DEG
+brain. Never do it without their explicit yes.
+
+- Tool: gbrain `capture` (MCP connector of the DEG brain), with the content of DECISIONS.md.
+- Destination: `0-inbox/`, as `type: note` — a conversation agent writes nowhere else in the brain.
+- Link: the project concerned, in double brackets (`[[project]]`), so the note is attached.
+- Never write a file directly into the brain's folder (`Cerveau-DEG`): the brain is written only
+  through gbrain; a file dropped by hand stays on the machine.
+- PLAN.md stays in the project: it is the execution manual, not a brain page.
+
+Moving the note from the inbox to the project's `decisions/` folder is the person's sorting, or the
+night chain's — not this skill's.
 
 ## DECISIONS.md — the decision log
 

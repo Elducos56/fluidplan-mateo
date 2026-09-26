@@ -1,0 +1,1182 @@
+{
+  "$schema": "../../../../.claude/skills/fluidplan/engine/schema/plan.schema.json",
+  "version": 2,
+  "id": "adapter-mateo",
+  "title": "Adapter fluidplan à ton travail",
+  "subtitle": "Ticket #243 · proposition du 26/09/2026",
+  "lang": "fr",
+  "accent": "blue",
+  "source": {
+    "kind": "request"
+  },
+  "context": "Tu décides plus vite, avec moins de lecture et moins de choses à retenir, et tes décisions arrivent là où tu regardes déjà.\n\nC'est le seul critère de ce plan. Chaque carte propose une adaptation de fluidplan, avec ce qu'elle change pour toi, son effort (S = une heure, M = une demi-journée, L = plus d'un jour) et les fichiers touchés.\n\nCe qui existe déjà et ne te sera pas reproposé : le français, le mode sombre, la mise en page téléphone, l'enregistrement de tes réponses au fil de l'eau, le bouton « Tout valider » pour les points mineurs d'une page, le glossaire au survol, le filtre « À traiter ». Ces réglages seront simplement activés par défaut.\n\nRien n'est encore codé. Tes réponses deviennent le plan d'exécution.",
+  "phases": [
+    {
+      "id": "p1",
+      "title": "Réglages par défaut",
+      "short": "Réglages",
+      "estimate": "≈ 2 h",
+      "days": 0.25
+    },
+    {
+      "id": "p2",
+      "title": "Décider plus vite",
+      "short": "Vitesse",
+      "estimate": "≈ 1 j",
+      "days": 1
+    },
+    {
+      "id": "p3",
+      "title": "Sortie vers ta carte",
+      "short": "Sortie",
+      "estimate": "≈ 1 j",
+      "days": 1
+    },
+    {
+      "id": "p4",
+      "title": "Installation et premier vrai plan",
+      "short": "Installation",
+      "estimate": "≈ 2 h",
+      "days": 0.25
+    }
+  ],
+  "glossary": [
+    {
+      "term": "dépôt d'origine",
+      "aliases": [
+        "upstream"
+      ],
+      "definition": "Le fluidplan de Morgan, dont ta copie est issue."
+    },
+    {
+      "term": "Tailscale",
+      "definition": "Un réseau privé entre tes appareils, sans ouvrir ton PC au wifi."
+    },
+    {
+      "term": "contrôle d'écriture",
+      "aliases": [
+        "check"
+      ],
+      "definition": "La vérification automatique que Claude lance avant de te montrer un plan."
+    }
+  ],
+  "pages": [
+    {
+      "id": "vitesse",
+      "section": "1 · Décider plus vite",
+      "title": "Moins de clics, moins de cartes à la fois",
+      "intro": "Cette page règle combien de gestes et combien de cartes il te faut pour finir un plan.",
+      "decisions": [
+        {
+          "id": "A1",
+          "title": "Un bouton « Tout comme recommandé »",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Sur la page faite à la main aujourd'hui, ta réponse a été « tout comme recommandé » pour 15 questions. Sans ce bouton, il te faut 15 clics et 15 lectures pour dire une seule chose.",
+          "proposal": "Un bouton en haut de l'écran accepte **d'un clic** toutes les cartes encore sans réponse, avec l'option recommandée. Les cartes critiques restent à trancher une par une.",
+          "facts": [
+            {
+              "label": "Existe déjà",
+              "value": "« Tout valider », mineures d'une page"
+            },
+            {
+              "label": "Effort",
+              "value": "S"
+            }
+          ],
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "sauf-critiques",
+                "label": "Tout, sauf les cartes critiques",
+                "recommended": true,
+                "detail": "Un clic règle le courant ; les 1 à 3 cartes critiques restent devant toi.",
+                "pros": [
+                  "Un clic pour l'essentiel du plan",
+                  "Les choix coûteux restent lus"
+                ],
+                "cons": [
+                  "Il reste 1 à 3 cartes à trancher à la main"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "bouton",
+                    "title": "Ajouter le bouton « Tout comme recommandé » dans la barre du haut",
+                    "do": "Dans `store.js`, une méthode `acceptRecommended({ skipCritical: true })` passe en `ok` chaque décision sans statut (et chaque item sans statut), sans toucher au contrôle : accepter sans toucher garde déjà l'option recommandée. Dans `layout.js`, un bouton à côté de « Envoyer à Claude », masqué quand plus rien n'est en attente. Une confirmation dit combien de cartes seront acceptées et combien de critiques restent.",
+                    "files": [
+                      {
+                        "path": "engine/public/js/store.js",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/js/layout.js",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/i18n/fr.json",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/i18n/en.json",
+                        "op": "modify"
+                      }
+                    ],
+                    "acceptance": [
+                      "Un clic puis « Confirmer » passe toutes les cartes non critiques en attente à OK",
+                      "Une carte critique reste « En attente »",
+                      "Une carte déjà répondue n'est pas modifiée"
+                    ],
+                    "verify": [
+                      "npm test"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "tout",
+                "label": "Absolument tout, critiques comprises",
+                "pros": [
+                  "Un seul clic, zéro carte restante"
+                ],
+                "cons": [
+                  "Un choix coûteux peut passer sans être lu"
+                ],
+                "effort": "S"
+              },
+              {
+                "id": "par-page",
+                "label": "Un bouton par page seulement",
+                "pros": [
+                  "Tu vois ce que tu acceptes"
+                ],
+                "cons": [
+                  "Un clic par page, et tu dois parcourir chaque page"
+                ],
+                "effort": "S"
+              }
+            ]
+          }
+        },
+        {
+          "id": "A2",
+          "title": "Combien de cartes au plus sur une page",
+          "importance": "important",
+          "phase": "p1",
+          "why": "Ta mémoire immédiate tient environ quatre éléments. Le moteur accepte aujourd'hui jusqu'à 6 cartes par page avant d'avertir Claude.",
+          "proposal": "Le contrôle d'écriture avertit Claude au-delà de **4 cartes non mineures** par page. Claude découpe alors en deux pages.",
+          "control": {
+            "kind": "number",
+            "min": 2,
+            "max": 6,
+            "step": 1,
+            "default": 4,
+            "unit": "cartes"
+          },
+          "tasks": [
+            {
+              "id": "plafond",
+              "title": "Plafond de cartes par page : {{value}} {{unit}}",
+              "do": "Dans `validate.mjs`, remplacer la limite `MAX_DECISIONS_PER_PAGE` par {{value}}. Mettre à jour la phrase « 3 to 5 decisions per page » dans `SKILL.md` et `references/authoring.md`.",
+              "files": [
+                {
+                  "path": "engine/lib/validate.mjs",
+                  "op": "modify"
+                },
+                {
+                  "path": "SKILL.md",
+                  "op": "modify"
+                },
+                {
+                  "path": "references/authoring.md",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Une page de {{value}} cartes non mineures ne produit aucun avertissement",
+                "Une carte de plus produit un avertissement"
+              ],
+              "verify": [
+                "npm run check"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "A3",
+          "title": "Une durée par carte et un total",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Tu estimes mal le temps, et une tâche sans durée se repousse. « 6 min pour finir » se commence ; « 18 cartes » ne se commence pas.",
+          "proposal": "Le moteur calcule seul une durée de lecture par carte. Le haut de l'écran affiche **le temps qui reste**, par exemple « ≈ 6 min ».",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "auto",
+                "label": "Calculée par le moteur",
+                "recommended": true,
+                "detail": "Mots lus à 200 par minute, plus 20 secondes par option.",
+                "pros": [
+                  "Aucun travail en plus pour Claude",
+                  "Toujours à jour après une révision"
+                ],
+                "cons": [
+                  "Une estimation grossière sur une carte difficile"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "duree",
+                    "title": "Calculer et afficher la durée par carte et le temps restant",
+                    "do": "Dans `model.js`, une fonction `readingSeconds(decision)` : mots de `why`, `proposal` et des options à 200 mots par minute, plus 20 s par option, arrondi à la minute. Dans `decision.js`, un badge « ≈ 2 min » dans l'en-tête de la carte. Dans `layout.js`, le total des cartes en attente à côté de la progression.",
+                    "files": [
+                      {
+                        "path": "engine/public/js/model.js",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/js/decision.js",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/js/layout.js",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/public/i18n/fr.json",
+                        "op": "modify"
+                      }
+                    ],
+                    "acceptance": [
+                      "Chaque carte affiche une durée",
+                      "Le temps restant baisse quand tu réponds à une carte"
+                    ],
+                    "verify": [
+                      "npm test"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "manuelle",
+                "label": "Écrite par Claude sur chaque carte",
+                "pros": [
+                  "Plus juste sur une carte difficile"
+                ],
+                "cons": [
+                  "Un champ de plus à écrire, souvent oublié"
+                ],
+                "effort": "S"
+              },
+              {
+                "id": "aucune",
+                "label": "Pas de durée",
+                "pros": [
+                  "Rien à faire"
+                ],
+                "cons": [
+                  "Tu ne sais pas si tu as le temps avant ton prochain rendez-vous"
+                ],
+                "effort": "S"
+              }
+            ]
+          }
+        },
+        {
+          "id": "M1",
+          "title": "Des touches 1, 2, 3, 4 pour répondre au clavier",
+          "importance": "minor",
+          "phase": "p2",
+          "why": "Tu réponds sans viser un bouton : 1 = OK, 2 = Pas OK, 3 = Changer, 4 = Expliquer, sur la carte sous la souris ou la suivante en attente.",
+          "proposal": "Touches 1 à 4 sur la carte active, touche N pour aller à la prochaine carte en attente.",
+          "tasks": [
+            {
+              "id": "touches",
+              "title": "Ajouter les raccourcis 1 à 4 et N",
+              "do": "Dans `layout.js`, étendre l'écoute `keydown` existante : hors champ de texte, 1 à 4 posent le verdict de la carte active, N fait défiler vers la prochaine carte « En attente ».",
+              "files": [
+                {
+                  "path": "engine/public/js/layout.js",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "La touche 1 pose OK sur la carte active",
+                "Taper 1 dans un champ de texte écrit « 1 »"
+              ],
+              "verify": [
+                "npm test"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clair",
+      "section": "2 · Comprendre du premier coup",
+      "title": "Le style et les schémas des cartes",
+      "intro": "Cette page règle la langue, le style et les schémas des cartes que Claude écrit.",
+      "decisions": [
+        {
+          "id": "B1",
+          "title": "Français et tutoiement par défaut",
+          "importance": "important",
+          "phase": "p1",
+          "why": "Le moteur démarre en anglais et l'interface française te vouvoie. Tout le reste de ton système te tutoie, et un plan créé sans `--lang fr` sort en anglais.",
+          "proposal": "Le français devient la langue par défaut. Tous les textes de l'interface passent au **tutoiement**, et « Modifier » devient « Changer ».",
+          "tasks": [
+            {
+              "id": "defaut-fr",
+              "title": "Mettre le français par défaut",
+              "do": "Dans `config.mjs`, `DEFAULTS.lang` passe à `fr`. Dans `engine/templates/plan.json`, `lang` passe à `fr` et les textes du modèle sont traduits.",
+              "files": [
+                {
+                  "path": "engine/lib/config.mjs",
+                  "op": "modify"
+                },
+                {
+                  "path": "engine/templates/plan.json",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "`new` sans `--lang` crée un plan en français"
+              ],
+              "verify": [
+                "npm test"
+              ]
+            },
+            {
+              "id": "tutoiement",
+              "title": "Passer l'interface française au tutoiement",
+              "do": "Réécrire les 320 lignes de `fr.json` : « vous » devient « tu », « Modifier » devient « Changer », « Envoyer à Claude » reste. Une idée par phrase.",
+              "files": [
+                {
+                  "path": "engine/public/i18n/fr.json",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Aucun « vous » ni « votre » dans `fr.json`",
+                "Le bouton de la carte s'appelle « Changer »"
+              ],
+              "verify": [
+                "npm test"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "B2",
+          "title": "Le style d'écriture des cartes",
+          "importance": "important",
+          "phase": "p1",
+          "why": "Tu veux comparer Claude en mode normal et Claude avec un seul style ADHD. Si fluidplan recopie des règles Clair dans son propre code, les deux modes écriront pareil et la comparaison ne voudra rien dire.",
+          "proposal": "fluidplan **ne recopie aucune règle Clair**. Claude écrit les cartes avec le style actif de ta session. On garde seulement deux avertissements qui valent dans les deux modes : une proposition de plus de 4 phrases, une phrase de plus de 30 mots.",
+          "learn_more": "Ce que tu as écrit au tour 1, mot pour mot :\n\n> C'est très bien, comme t'as dit, mais j'aimerais bien voir, de base, avec le mode officiel d'Opus, comment il fonctionne. Donc, tu supprimes tous les styles que j'ai déjà créés. Tu crées ensuite un seul qui est basé sur les recherches que t'as faites sur les personnes ADHD, sur ce que je t'ai envoyé aussi, optimisé selon Claude. Après, comme ça, je peux juste tester le mode normal, puis tester le mode ADHD\n\nLe travail sur les styles lui-même (archiver les styles existants, en écrire un seul) est mené en ce moment par un autre agent, hors de ce plan.\n\nLes deux avertissements gardés reprennent une règle que fluidplan donne déjà à Claude (« une proposition de deux à quatre phrases ») : ils ne dépendent d'aucun style. L'avertissement sur le gras est retiré : il venait du style Clair.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "style-actif",
+                "label": "Style actif de la session + deux avertissements neutres",
+                "recommended": true,
+                "pros": [
+                  "Le test mode normal contre mode ADHD reste propre",
+                  "Les cartes restent courtes dans les deux modes"
+                ],
+                "cons": [
+                  "Deux avertissements à coder"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "neutres",
+                    "title": "Avertir sur une proposition trop longue et une phrase trop longue",
+                    "do": "Dans `validate.mjs`, pour toutes les langues : un avertissement pour une `proposal` de plus de 4 phrases, et pour une phrase de plus de 30 mots dans `why` ou `proposal`. Aucune règle propre au style Clair.",
+                    "files": [
+                      {
+                        "path": "engine/lib/validate.mjs",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "test/unit/clair.test.mjs",
+                        "op": "create"
+                      }
+                    ],
+                    "acceptance": [
+                      "Une proposition de 5 phrases produit un avertissement",
+                      "Aucun avertissement ne porte sur le gras ou les parenthèses"
+                    ],
+                    "verify": [
+                      "npm run unit"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "style-seul",
+                "label": "Style actif de la session, sans aucun avertissement",
+                "pros": [
+                  "Rien à coder"
+                ],
+                "cons": [
+                  "Rien ne signale une carte trop longue"
+                ],
+                "effort": "S"
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "renvoi-style",
+              "title": "Écrire dans les références que Claude suit le style actif",
+              "do": "Dans `references/pedagogy.md`, section « Tone » : Claude écrit les cartes avec le style de réponse actif de la session ; fluidplan n'ajoute aucune règle de style propre à Mateo.",
+              "files": [
+                {
+                  "path": "references/pedagogy.md",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Aucune règle Clair n'est recopiée dans `references/`"
+              ],
+              "verify": [
+                "npm run check"
+              ]
+            }
+          ],
+          "revision": {
+            "round": 2,
+            "note": "Tu veux comparer le mode normal et un seul style ADHD : fluidplan suit donc le style actif de ta session et ne recopie plus aucune règle Clair. Je garde deux avertissements neutres, utiles dans les deux modes, et je retire celui sur le gras."
+          }
+        },
+        {
+          "id": "B3",
+          "title": "« Expliquer » et les schémas dans les cartes",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Tu comprends le plus vite avec un schéma. fluidplan sait déjà en dessiner 15 sortes (schéma de flux, chronologie, comparaison…), mais Claude ne les utilise que s'il y pense.",
+          "proposal": "La réponse à « Expliquer » donne **deux phrases sans jargon et un schéma** quand il aide. Chaque carte critique ou importante porte un visuel par défaut.",
+          "visual": {
+            "kind": "diagram",
+            "caption": "Ce qui se passe quand tu cliques « Expliquer »",
+            "nodes": [
+              {
+                "id": "q",
+                "label": "Tu cliques Expliquer",
+                "sub": "et tu écris ta question",
+                "col": 0,
+                "row": 0,
+                "tone": "muted"
+              },
+              {
+                "id": "c",
+                "label": "Claude révise la carte",
+                "sub": "au tour suivant",
+                "col": 1,
+                "row": 0,
+                "tone": "primary"
+              },
+              {
+                "id": "t",
+                "label": "Deux phrases",
+                "sub": "sans jargon",
+                "col": 2,
+                "row": 0,
+                "tone": "success"
+              },
+              {
+                "id": "s",
+                "label": "Un schéma",
+                "sub": "quand il aide",
+                "col": 2,
+                "row": 1,
+                "tone": "success"
+              }
+            ],
+            "edges": [
+              {
+                "from": "q",
+                "to": "c"
+              },
+              {
+                "from": "c",
+                "to": "t"
+              },
+              {
+                "from": "c",
+                "to": "s",
+                "dashed": true
+              }
+            ]
+          },
+          "learn_more": "Ce que tu as écrit au tour 1, mot pour mot :\n\n> Mais selon moi, les diagrammes, c'est toujours ce qui me fait comprendre le plus facilement, en fait. Si je vois un diagramme, pourquoi pas ici dans Fluide ? Ça pourrait être bien, ou j'en sais rien, mais selon moi, c'est quand même important. Fluide plan, c'est quand même le top si il y a des diagrammes en plus.\n\nLe schéma de cette carte est un exemple de ce que tu verrais. Il ne demande aucun code nouveau : ce sont les visuels déjà intégrés. Le travail consiste à écrire la consigne pour Claude et un avertissement quand une carte importante n'a pas de visuel.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "schema-partout",
+                "label": "Deux phrases + schéma, et un visuel par défaut sur chaque carte importante",
+                "recommended": true,
+                "pros": [
+                  "Tu vois le mécanisme avant de lire",
+                  "Aucun visuel nouveau à coder"
+                ],
+                "cons": [
+                  "Des cartes plus hautes à faire défiler",
+                  "Un schéma forcé peut être décoratif"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "avert-visuel",
+                    "title": "Avertir quand une carte critique ou importante n'a pas de visuel",
+                    "do": "Dans `validate.mjs` : un avertissement pour une décision `critical` ou `important` sans `visual`. Le message propose `diagram`, `compare` ou `timeline`.",
+                    "files": [
+                      {
+                        "path": "engine/lib/validate.mjs",
+                        "op": "modify"
+                      }
+                    ],
+                    "acceptance": [
+                      "Une carte importante sans visuel produit un avertissement",
+                      "Une carte mineure sans visuel n'en produit pas"
+                    ],
+                    "verify": [
+                      "npm run unit"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "schema-reponse",
+                "label": "Deux phrases + schéma, seulement en réponse à « Expliquer »",
+                "pros": [
+                  "Les cartes restent courtes au premier tour"
+                ],
+                "cons": [
+                  "Tu dois demander pour voir un schéma"
+                ],
+                "effort": "S"
+              },
+              {
+                "id": "immediate",
+                "label": "Réponse immédiate, sans fermer le tour",
+                "detail": "La question part tout de suite ; Claude répond dans la carte en une minute environ.",
+                "pros": [
+                  "Tu n'as rien à retenir",
+                  "Tu continues le plan pendant que Claude répond"
+                ],
+                "cons": [
+                  "Plus d'un jour de travail",
+                  "Change la boucle de tours, la partie la plus délicate du moteur"
+                ],
+                "effort": "L"
+              }
+            ]
+          },
+          "tasks": [
+            {
+              "id": "consigne",
+              "title": "Écrire la consigne de réponse à « Expliquer » et des visuels",
+              "do": "Dans `SKILL.md` étape 7 et `references/pedagogy.md` : la réponse à « Expliquer » va dans `revision.note`, en deux phrases sans terme technique, et Claude ajoute un `visual` (le plus souvent `diagram`) quand un mécanisme ou un flux est en jeu. Dans `references/authoring.md` et `references/visuals.md` : chaque carte critique ou importante porte un visuel par défaut.",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "op": "modify"
+                },
+                {
+                  "path": "references/pedagogy.md",
+                  "op": "modify"
+                },
+                {
+                  "path": "references/authoring.md",
+                  "op": "modify"
+                },
+                {
+                  "path": "references/visuals.md",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "La consigne dit « deux phrases », « sans terme technique » et « un schéma quand il aide »"
+              ],
+              "verify": [
+                "npm run check"
+              ]
+            }
+          ],
+          "revision": {
+            "round": 2,
+            "note": "Tu comprends mieux avec un schéma : la réponse à « Expliquer » donne maintenant deux phrases et un schéma, et chaque carte importante porte un visuel par défaut. Le schéma de cette carte montre ce que ça donne ; aucun visuel nouveau n'est à coder."
+          }
+        },
+        {
+          "id": "M2",
+          "title": "Un glossaire sans les mots que tu connais",
+          "importance": "minor",
+          "phase": "p1",
+          "why": "Te définir « ticket » ou « ADR », c'est te prendre pour un débutant.",
+          "proposal": "Le contrôle d'écriture avertit si le glossaire contient un mot de ta liste connue.",
+          "tasks": [
+            {
+              "id": "connus",
+              "title": "Avertir sur un mot connu dans le glossaire",
+              "do": "Dans `validate.mjs`, une liste `KNOWN_FR` (dépôt, ticket, ADR, VPS, gbrain, workspace, pastille, Notion, Hermès, Riffado) ; un terme de cette liste dans `glossary` produit un avertissement.",
+              "files": [
+                {
+                  "path": "engine/lib/validate.mjs",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Un terme « ADR » dans le glossaire produit un avertissement"
+              ],
+              "verify": [
+                "npm run unit"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sortie",
+      "section": "3 · Atterrir là où tu regardes",
+      "title": "Où vont tes décisions à la fin",
+      "intro": "Cette page règle ce que devient un plan une fois que tout est tranché.",
+      "decisions": [
+        {
+          "id": "C1",
+          "title": "Où va un plan terminé, cerveau compris",
+          "importance": "critical",
+          "phase": "p3",
+          "why": "Tu ne veux pas d'une sortie de plus qui vit à côté de ton cerveau gbrain. Depuis ce soir (ADR 0039), le cerveau DEG ne s'écrit que par gbrain, jamais par fichier, et un agent en conversation n'écrit que dans `0-inbox/`.",
+          "proposal": "Le schéma montre où irait chaque sortie. Je recommande **le plus simple** : rien de neuf, PLAN.md et DECISIONS.md restent dans le dépôt, et DECISIONS.md est déposé dans l'inbox du cerveau par gbrain. Tu tranches quand tu veux : rien n'en dépend avant la phase 3.",
+          "visual": {
+            "kind": "diagram",
+            "caption": "Où irait chaque sortie d'un plan terminé",
+            "nodes": [
+              {
+                "id": "plan",
+                "label": "Plan tranché",
+                "col": 0,
+                "row": 0,
+                "tone": "primary"
+              },
+              {
+                "id": "dec",
+                "label": "DECISIONS.md",
+                "sub": "le pourquoi",
+                "col": 1,
+                "row": 0,
+                "tone": "default"
+              },
+              {
+                "id": "tasks",
+                "label": "PLAN.md",
+                "sub": "les tâches",
+                "col": 1,
+                "row": 1,
+                "tone": "default"
+              },
+              {
+                "id": "inbox",
+                "label": "Cerveau DEG · 0-inbox/",
+                "sub": "par gbrain, type: note",
+                "col": 2,
+                "row": 0,
+                "tone": "success"
+              },
+              {
+                "id": "decdir",
+                "label": "decisions/ du projet",
+                "sub": "type: decision, après tri",
+                "col": 2,
+                "row": 1,
+                "tone": "muted"
+              },
+              {
+                "id": "gh",
+                "label": "Ticket GitHub",
+                "sub": "résultat souhaité écrit",
+                "col": 2,
+                "row": 2,
+                "tone": "muted"
+              }
+            ],
+            "edges": [
+              {
+                "from": "plan",
+                "to": "dec"
+              },
+              {
+                "from": "plan",
+                "to": "tasks"
+              },
+              {
+                "from": "dec",
+                "to": "inbox",
+                "label": "capture"
+              },
+              {
+                "from": "inbox",
+                "to": "decdir",
+                "label": "tri",
+                "dashed": true
+              },
+              {
+                "from": "tasks",
+                "to": "gh",
+                "label": "ADR 0030",
+                "dashed": true
+              }
+            ]
+          },
+          "learn_more": "Ce que tu as écrit au tour 1, mot pour mot :\n\n> Je sais pas ça, il va falloir réfléchir, parce qu'il faut voir comment ça s'intègre dans mon second cerveau aussi, le G brain. Ça, c'est important, parce que sinon j'ai l'impression que on va de nouveau faire un truc, fois.\n\n**Ce que disent les règles du cerveau** (`Cerveau-DEG/AGENTS.md`, ADR 0032 et 0039) :\n\n- une décision a sa place dans le dossier `decisions/` du projet qui l'a produite, avec `type: decision` ;\n- mais un agent en conversation n'a le droit d'écrire que dans `0-inbox/` ; une écriture ailleurs est comptée le lendemain ;\n- et on écrit uniquement par gbrain : un fichier posé dans `C:\\Users\\mateo\\Cerveau-DEG` reste sur le poste.\n\nDonc la seule route permise aujourd'hui passe par l'inbox. Le passage de l'inbox au dossier `decisions/` du projet, c'est ton tri, ou la chaîne de nuit.\n\n**Pour les tâches**, l'ADR 0030 tranche : ce qui a un résultat souhaité écrit va en ticket GitHub, le reste dans Notion. Un plan fluidplan tranché a un résultat souhaité écrit, donc ses tâches iraient en tickets.\n\nNon vérifié : la règle 5 d'AGENTS.md refuse les synthèses générées. DECISIONS.md contient tes décisions, pas un résumé de parole ; je pense qu'il passe, mais c'est à toi de le confirmer.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "inbox-seul",
+                "label": "Rien de neuf : PLAN.md et DECISIONS.md, et DECISIONS.md déposé dans l'inbox du cerveau",
+                "recommended": true,
+                "pros": [
+                  "Aucun outil nouveau, aucune règle du cerveau contournée",
+                  "Tes décisions arrivent là où tu tries déjà"
+                ],
+                "cons": [
+                  "Le rangement final dans `decisions/` reste un geste de tri"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "capture",
+                    "title": "Déposer DECISIONS.md dans l'inbox du cerveau DEG après `finalize`",
+                    "do": "Dans `SKILL.md` étape 8 et `references/execution-plan.md` : après `finalize`, Claude dépose le contenu de DECISIONS.md dans le cerveau DEG avec l'outil gbrain `capture`, en `type: note`, dans `0-inbox/`, avec en doubles crochets le projet concerné. Jamais d'écriture directe de fichier dans `Cerveau-DEG`.",
+                    "files": [
+                      {
+                        "path": "SKILL.md",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "references/execution-plan.md",
+                        "op": "modify"
+                      }
+                    ],
+                    "acceptance": [
+                      "La consigne nomme l'outil `capture`, `type: note` et `0-inbox/`",
+                      "La consigne interdit l'écriture par fichier dans le cerveau"
+                    ],
+                    "verify": [
+                      "npm run check"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "chaque-place",
+                "label": "Chaque sortie à sa place définitive",
+                "detail": "Décisions en page `type: decision` dans le `decisions/` du projet ; tâches en tickets GitHub selon l'ADR 0030.",
+                "pros": [
+                  "Plus aucun tri à faire après un plan"
+                ],
+                "cons": [
+                  "Contraire à la règle « un agent en conversation écrit seulement dans 0-inbox/ »",
+                  "Une demi-journée de travail, et une exception à écrire dans AGENTS.md"
+                ],
+                "effort": "M"
+              },
+              {
+                "id": "fichiers",
+                "label": "PLAN.md et DECISIONS.md dans le dépôt seulement",
+                "pros": [
+                  "Rien à faire"
+                ],
+                "cons": [
+                  "Tes décisions restent hors du cerveau"
+                ],
+                "effort": "S"
+              }
+            ]
+          },
+          "revision": {
+            "round": 2,
+            "note": "Tu ne voulais pas trancher sans voir le lien avec ton cerveau : la carte montre maintenant, schéma à l'appui, où irait chaque sortie. Je recommande l'option la plus simple, qui dépose seulement DECISIONS.md dans l'inbox par gbrain."
+          }
+        },
+        {
+          "id": "C2",
+          "title": "Le dossier où vivent les plans",
+          "importance": "important",
+          "phase": "p3",
+          "why": "Par défaut, fluidplan crée un dossier `.fluidplan/` à la racine de chaque dépôt. L'ADR 0033 interdit la racine d'un dépôt et tout dossier neuf non listé.",
+          "proposal": "Les plans vont dans `docs/fluidplan/<id>/`, une destination déjà connue.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "docs",
+                "label": "`docs/fluidplan/`",
+                "recommended": true,
+                "pros": [
+                  "Conforme à l'ADR 0033",
+                  "Tu retrouves le plan à côté des autres documents"
+                ],
+                "cons": [
+                  "Les fichiers de réponses doivent être exclus de git à la main"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "plansdir",
+                    "title": "Mettre `docs/fluidplan` comme dossier par défaut",
+                    "do": "Dans `config.mjs`, `DEFAULTS.plansDir` passe à `docs/fluidplan`. La commande `new` ajoute au `.gitignore` du dépôt les lignes `docs/fluidplan/*/answers.json`, `state.json`, `rounds/`.",
+                    "files": [
+                      {
+                        "path": "engine/lib/config.mjs",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/fluidplan.mjs",
+                        "op": "modify"
+                      }
+                    ],
+                    "acceptance": [
+                      "`new` crée le plan dans `docs/fluidplan/<id>/`",
+                      "`answers.json` n'apparaît pas dans `git status`"
+                    ],
+                    "verify": [
+                      "npm test"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "cache",
+                "label": "Garder `.fluidplan/`",
+                "pros": [
+                  "Rien à changer",
+                  "Dossier caché, comme `.github/`"
+                ],
+                "cons": [
+                  "Un dossier neuf à la racine de chaque dépôt"
+                ],
+                "effort": "S"
+              }
+            ]
+          }
+        },
+        {
+          "id": "M3",
+          "title": "Une seule suite proposée à la fin",
+          "importance": "minor",
+          "phase": "p3",
+          "why": "L'ADR 0026 : une seule suite, jamais une liste.",
+          "proposal": "La page de synthèse finit par une seule ligne : la prochaine chose à faire, avec son lien.",
+          "tasks": [
+            {
+              "id": "suite",
+              "title": "Afficher une seule suite sur la page de synthèse",
+              "do": "Dans `summary.js`, quand tout est tranché : une ligne « Suite : » avec la première phase de PLAN.md, ou son ticket si `publish` a tourné.",
+              "files": [
+                {
+                  "path": "engine/public/js/summary.js",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Une seule ligne « Suite : » apparaît quand le plan est prêt"
+              ],
+              "verify": [
+                "npm test"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reprendre",
+      "section": "4 · Reprendre, ailleurs",
+      "title": "Après une coupure, et sur le téléphone",
+      "intro": "Cette page règle comment tu reprends un plan et comment tu l'ouvres hors de ton PC.",
+      "decisions": [
+        {
+          "id": "D1",
+          "title": "Reprendre là où tu en étais",
+          "importance": "important",
+          "phase": "p2",
+          "why": "Tes réponses sont déjà enregistrées. Ce qui manque, c'est l'endroit : après une coupure, tu dois retrouver seul quelle carte tu lisais.",
+          "proposal": "En rouvrant le plan, un bandeau dit **« Tu étais sur la carte B2. Il reste 5 cartes, ≈ 4 min. »** avec un bouton « Reprendre ».",
+          "tasks": [
+            {
+              "id": "reprise",
+              "title": "Afficher le bandeau « Reprendre »",
+              "do": "Dans `layout.js`, mémoriser dans le navigateur la dernière carte touchée. Au chargement, si des cartes restent en attente, afficher le bandeau avec le nombre restant et la durée (A3), et un bouton qui va à la carte.",
+              "files": [
+                {
+                  "path": "engine/public/js/layout.js",
+                  "op": "modify"
+                },
+                {
+                  "path": "engine/public/i18n/fr.json",
+                  "op": "modify"
+                }
+              ],
+              "acceptance": [
+                "Après fermeture et réouverture, le bandeau nomme la dernière carte touchée",
+                "Le bouton « Reprendre » fait défiler jusqu'à cette carte"
+              ],
+              "verify": [
+                "npm test"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "D2",
+          "title": "Dicter dans « Changer » et « Expliquer »",
+          "importance": "minor",
+          "phase": "p2",
+          "proposal": "Rien à faire : Wispr Flow suffit. fluidplan ne reçoit aucun développement de dictée.",
+          "revision": {
+            "round": 2,
+            "note": "Tu dictes déjà avec Wispr Flow : j'ai retiré tout développement de dictée, la carte dit seulement qu'il n'y a rien à faire."
+          }
+        },
+        {
+          "id": "D3",
+          "title": "Ouvrir un plan sur ton téléphone",
+          "importance": "important",
+          "phase": "p4",
+          "why": "Tu as déjà Tailscale sur tes appareils. La page s'affiche déjà bien sur téléphone ; seul le serveur refuse tout ce qui ne vient pas de ton PC.",
+          "proposal": "Le serveur écoute **aussi sur l'adresse Tailscale** de ton PC, en plus de 127.0.0.1. La vérification existante de l'adresse demandée et de la page d'origine accepte cette seule adresse en plus.",
+          "learn_more": "**Le geste exact**, dans `engine/server.mjs` :\n\n1. Une option `serve --tailscale` lit l'adresse Tailscale du PC avec `tailscale ip -4` (elle commence par `100.`).\n2. Le serveur écoute sur `127.0.0.1` et sur cette adresse, au même port. Il refuse toute autre adresse.\n3. La vérification déjà en place refuse toute requête dont l'en-tête `Host` n'est pas `127.0.0.1:<port>` ou `localhost:<port>`, et toute écriture venue d'une autre page (`Origin`). On y ajoute exactement `100.x.y.z:<port>`, rien d'autre.\n4. Au lancement, la commande affiche l'adresse à ouvrir sur le téléphone : `http://100.x.y.z:5178/`.\n\n**Ce que la sécurité couvre** : un site web ouvert dans ton navigateur ne peut toujours rien lire ni écrire, et aucun appareil du wifi ne voit le serveur. **Ce qu'elle ne couvre pas** : tout appareil de ton réseau Tailscale peut ouvrir la page. Aujourd'hui, ce réseau ne contient que tes appareils.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "tailscale",
+                "label": "Via Tailscale",
+                "recommended": true,
+                "pros": [
+                  "Seuls tes appareils y accèdent",
+                  "Tailscale est déjà installé"
+                ],
+                "cons": [
+                  "Un appareil ajouté plus tard à ton réseau Tailscale y accéderait aussi"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "ecoute",
+                    "title": "Écouter aussi sur l'adresse Tailscale avec `serve --tailscale`",
+                    "do": "Dans `fluidplan.mjs`, l'option `--tailscale` lance `tailscale ip -4` et refuse une adresse qui ne commence pas par `100.`. Dans `server.mjs`, un second `listen` sur cette adresse au même port, et l'adresse `100.x.y.z:<port>` ajoutée aux valeurs acceptées pour `Host` et `Origin`. L'adresse à ouvrir sur le téléphone s'affiche au lancement.",
+                    "files": [
+                      {
+                        "path": "engine/server.mjs",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "engine/fluidplan.mjs",
+                        "op": "modify"
+                      },
+                      {
+                        "path": "test/unit/tailscale.test.mjs",
+                        "op": "create"
+                      }
+                    ],
+                    "acceptance": [
+                      "Le téléphone ouvre le plan par l'adresse Tailscale",
+                      "Une requête avec un autre `Host` reçoit le refus 421",
+                      "Sans `--tailscale`, le serveur n'écoute que sur 127.0.0.1"
+                    ],
+                    "verify": [
+                      "npm test"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "plus-tard",
+                "label": "Pas maintenant",
+                "pros": [
+                  "Aucun changement du serveur"
+                ],
+                "cons": [
+                  "Pas de décision depuis le téléphone"
+                ],
+                "effort": "S"
+              }
+            ]
+          },
+          "revision": {
+            "round": 2,
+            "note": "Tu as déjà Tailscale : l'option est recommandée et la carte décrit le geste exact. Le serveur écoute aussi sur ton adresse Tailscale, et la vérification existante n'accepte que cette adresse en plus."
+          }
+        }
+      ]
+    },
+    {
+      "id": "leger",
+      "section": "5 · Garder l'outil sûr et léger",
+      "title": "Ta copie de fluidplan dans la durée",
+      "intro": "Cette page règle comment ta copie reste sûre, à jour et installée.",
+      "decisions": [
+        {
+          "id": "E1",
+          "title": "Comment ta copie s'écarte de l'original",
+          "importance": "critical",
+          "phase": "p1",
+          "why": "Le code a été audité le 26/09 au commit 755d1b2. Chaque mise à jour venue du dépôt d'origine doit être relue ; plus ta copie s'en écarte, plus cette relecture coûte cher.",
+          "proposal": "Ta copie change des réglages, des textes et ajoute des fichiers. Elle **ne réécrit pas** le cœur du moteur.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "ecart-minimal",
+                "label": "Écart minimal",
+                "recommended": true,
+                "pros": [
+                  "Une mise à jour de l'original se relit en une heure",
+                  "Tu gardes les corrections de Morgan"
+                ],
+                "cons": [
+                  "Certaines idées doivent attendre ou passer par un fichier séparé"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "journal-ecart",
+                    "title": "Tenir la liste des écarts avec l'original",
+                    "do": "Créer `MATEO.md` : la liste des fichiers modifiés et pourquoi, le dernier commit de l'original relu (755d1b2), et la commande de mise à jour `git fetch upstream && git diff 755d1b2 upstream/main`.",
+                    "files": [
+                      {
+                        "path": "MATEO.md",
+                        "op": "create"
+                      }
+                    ],
+                    "acceptance": [
+                      "Chaque fichier modifié par ce plan est listé avec sa raison"
+                    ],
+                    "verify": [
+                      "git diff --stat 755d1b2"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "reecriture",
+                "label": "Réécriture libre",
+                "pros": [
+                  "Aucune contrainte sur les idées"
+                ],
+                "cons": [
+                  "Chaque mise à jour de l'original devient un chantier",
+                  "Nouvel audit complet à chaque fois"
+                ],
+                "effort": "L"
+              }
+            ]
+          }
+        },
+        {
+          "id": "E2",
+          "title": "Installer ta copie à la place de l'original",
+          "importance": "important",
+          "phase": "p4",
+          "why": "Le ticket #243 est résolu quand ta copie remplace l'original installé. Si la compétence installée suit le dossier de travail, une modification à moitié finie casse tes plans en cours.",
+          "proposal": "Un script copie une version figée de ta copie dans `~/.claude/skills/fluidplan`. On relance le script à chaque nouvelle version.",
+          "control": {
+            "kind": "choice",
+            "options": [
+              {
+                "id": "copie-figee",
+                "label": "Copie figée, par script",
+                "recommended": true,
+                "pros": [
+                  "Un travail en cours ne casse jamais la version installée"
+                ],
+                "cons": [
+                  "Un script à relancer après chaque version"
+                ],
+                "effort": "S",
+                "tasks": [
+                  {
+                    "id": "installer",
+                    "title": "Écrire le script d'installation",
+                    "do": "Créer `scripts/installer-mateo.ps1` : vérifie que la branche `main` est propre, copie le dépôt dans `~/.claude/skills/fluidplan` sans `.git`, écrit le commit installé dans `INSTALLED.txt` et une trace datée.",
+                    "files": [
+                      {
+                        "path": "scripts/installer-mateo.ps1",
+                        "op": "create"
+                      }
+                    ],
+                    "acceptance": [
+                      "`INSTALLED.txt` contient le commit installé",
+                      "Le script refuse si des modifications ne sont pas commitées"
+                    ],
+                    "verify": [
+                      "pwsh scripts/installer-mateo.ps1 -WhatIf"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "lien",
+                "label": "Un lien vers le dossier de travail",
+                "pros": [
+                  "Chaque modification est active tout de suite"
+                ],
+                "cons": [
+                  "Une modification à moitié finie casse tes plans en cours"
+                ],
+                "effort": "S"
+              }
+            ]
+          }
+        },
+        {
+          "id": "M4",
+          "title": "Les illustrations payantes restent inertes",
+          "importance": "minor",
+          "phase": "p1",
+          "why": "Ton abonnement ChatGPT ne peut pas servir ici. La connexion ChatGPT de Codex ne marche que pour Codex, et OpenAI facture toute autre utilisation par une clé API séparée, au tarif normal.",
+          "proposal": "On garde les illustrations **inertes**, sans clé : les schémas intégrés acceptés en B3 couvrent ton besoin de comprendre par l'image. Si tu veux un jour des images, la voie documentée est une clé API OpenAI séparée, payée à l'usage.",
+          "tasks": [
+            {
+              "id": "noter",
+              "title": "Noter dans `MATEO.md` que les illustrations restent sans clé",
+              "do": "Une ligne dans `MATEO.md` : pas de fichier `engine/.env`, donc aucune illustration et aucun appel réseau.",
+              "files": [
+                {
+                  "path": "MATEO.md",
+                  "op": "modify"
+                }
+              ],
+              "after": [
+                "E1/journal-ecart"
+              ],
+              "acceptance": [
+                "La ligne existe"
+              ],
+              "verify": [
+                "git diff --stat 755d1b2"
+              ]
+            }
+          ],
+          "learn_more": "Ce que dit la doc, vérifiée le 26/09/2026 :\n\n- Doc Codex, page « Authentication » (learn.chatgpt.com/docs/auth) : la connexion ChatGPT donne accès aux fonctions de Codex. Une clé API « uses standard API pricing instead of included ChatGPT plan credits ».\n- Centre d'aide OpenAI, « Managing billing for ChatGPT and the API platform » : ChatGPT et l'API ont deux facturations séparées ; l'abonnement ne couvre pas les appels à l'API.\n\nRéutiliser la connexion de Codex dans fluidplan serait un détournement non documenté : je ne le propose pas.\n\nNon vérifié : une offre gratuite pour générer des images chez un des services pris en charge (OpenAI, Gemini, Ludo.ai, Meshy). Je n'en ai trouvé aucune confirmée dans la doc.",
+          "revision": {
+            "round": 3,
+            "note": "J'ai vérifié : ton abonnement ChatGPT ne donne pas accès à l'API d'images, la connexion ChatGPT ne sert qu'à Codex. Je recommande de garder les illustrations inertes, puisque les schémas de B3 suffisent, et de prendre une clé API séparée seulement si tu veux un jour des images."
+          }
+        }
+      ]
+    }
+  ]
+}

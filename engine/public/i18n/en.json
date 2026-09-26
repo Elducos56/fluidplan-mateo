@@ -316,5 +316,25 @@
   "images.confirm": "Generate",
   "images.done": "Illustration saved: {path}",
   "images.noProvider": "No service configured: add a key in engine/.env.",
-  "images.allExhausted": "Limit reached for every configured service ({quota} per service and per plan)."
+  "images.allExhausted": "Limit reached for every configured service ({quota} per service and per plan).",
+
+  "accept.button": "Everything as recommended",
+  "accept.hint": "Accepts in one click every card without an answer, except the critical ones",
+  "accept.title": "Accept everything as recommended?",
+  "accept.text_one": "{count} card will be accepted with the recommended option.",
+  "accept.text_other": "{count} cards will be accepted with the recommended option.",
+  "accept.critical_one": "{count} critical card is left for you to settle.",
+  "accept.critical_other": "{count} critical cards are left for you to settle.",
+  "accept.confirm": "Accept",
+  "accept.done_one": "{count} card accepted.",
+  "accept.done_other": "{count} cards accepted.",
+  "decision.minutes": "≈ {n} min",
+  "decision.minutesTitle": "Estimated reading time",
+  "nav.remaining": "≈ {n} min left",
+  "resume.title": "You were on card {id}: {title}",
+  "resume.text_one": "{count} card left, ≈ {minutes} min.",
+  "resume.text_other": "{count} cards left, ≈ {minutes} min.",
+  "resume.button": "Resume",
+  "summary.next": "Next: {step}",
+  "summary.nextPlan": "execute PLAN.md"
 }

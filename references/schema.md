@@ -9,9 +9,9 @@ also enforces the rules that matter (references, cycles, files). Keys are in Eng
 | Field | Required | Role |
 |---|---|---|
 | `version` | yes | `2` |
-| `id` | yes | folder name: `.fluidplan/<id>/` (`a-z`, `0-9`, `_`, `-`) |
+| `id` | yes | folder name: `docs/fluidplan/<id>/` (`a-z`, `0-9`, `_`, `-`) |
 | `title`, `subtitle` | `title` | title of the app and of the outputs |
-| `lang` | | `en` (default) or `fr`: interface and exports |
+| `lang` | | `fr` (default) or `en`: interface and exports |
 | `accent` | | main color: `neutral` (default), `blue`, `green`, `orange`, `rose`, `violet`, `yellow` |
 | `source` | | `{ "kind": "md" \| "txt" \| "docx" \| "pdf" \| "request", "path": "docs/X.md" }` |
 | `context` | recommended | the request, the scope, what already exists (home page, top of the outputs) |

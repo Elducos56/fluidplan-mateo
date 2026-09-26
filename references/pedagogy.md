@@ -66,11 +66,19 @@ In the next round, the person must find their answer **in the card**, not in the
 1. extend `why` (if the question is about what is at stake) or `learn_more` (if it is about how it
    works);
 2. change the proposal only if the question reveals a real problem;
-3. `revision.note` sums up the answer in one sentence: "Explained: a clock that goes backwards is
-   ignored; we keep the latest date seen."
+3. `revision.note` gives the answer in **two sentences, with no technical term**, starting from
+   what it changes for the person: "A clock that goes backwards is ignored. We keep the latest
+   date seen, so nothing moves back in your history."
+4. Add **a diagram when it helps**: if the question is about a mechanism, a flow or a sequence,
+   give the decision a `visual` (most often `diagram`, otherwise `compare` or `timeline`). A
+   picture answers "how does it work" faster than a paragraph. The details go in `learn_more`.
 
 ## Tone
 
+- Write the cards in the **response style active in the session** (the person's output style, or
+  Claude's default one). fluidplan adds no writing rule of its own on top of it: the same plan must
+  read naturally in either mode, so the person can compare them.
+
 - Address the person simply, in the present tense. No promises, no superlatives.
 - One idea per sentence. Figures rather than adjectives.
-- Write in the plan's language (`lang`: `en` by default, or `fr`); the interface follows.
+- Write in the plan's language (`lang`: `fr` by default, or `en`); the interface follows.
