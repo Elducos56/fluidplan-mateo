@@ -6,12 +6,14 @@ import { verdictBadge, VERDICT_STYLE } from "./decision.js";
 import { buildDecisionsMd } from "./export_decisions.js";
 import { buildPlanMd } from "./export_plan.js";
 import { icon } from "./icons.js";
-import { allDecisions, controlSummary, counts, readiness, verdict } from "./model.js";
+import { allDecisions, controlSummary, counts, orderedPhases, readiness, verdict } from "./model.js";
 import { alert, button, tabs, toast } from "./ui.js";
 
 export function renderSummary(ctx, { api, submit }) {
   const { plan, store, t } = ctx;
   const readinessSlot = h("div");
+  // One next step, never a list: the first phase of PLAN.md once everything is settled.
+  const nextLine = h("p", { class: "summary-next", hidden: true });
   const stats = h("div", { class: "stat-grid five" });
   const lists = h("div", { class: "summary-lists" });
   const status = h("p", { class: "export-status muted" });
@@ -38,6 +40,7 @@ export function renderSummary(ctx, { api, submit }) {
       h("h1", { id: "page-title" }, t("summary.title")),
       h("p", { class: "page-intro" }, t("summary.intro"))),
     readinessSlot,
+    nextLine,
     stats,
     h("div", { class: "summary-actions" }, sendButton, writeButton, downloadPlan, downloadDecisions),
     status,
@@ -90,6 +93,9 @@ export function renderSummary(ctx, { api, submit }) {
     readinessSlot.replaceChildren(ready.ready
       ? alert({ variant: "success", icon: "circle-check", title: t("summary.readyTitle"), description: t("summary.readyText") })
       : alert({ variant: "default", icon: "circle-dashed", title: t("summary.notReadyTitle"), description: t("summary.notReadyText", { pending: ready.pending.length, revise: ready.revise.length }) }));
+    const first = orderedPhases(plan, store.answers)[0];
+    nextLine.hidden = !ready.ready;
+    nextLine.replaceChildren(icon("arrow-right"), h("strong", {}, t("summary.next", { step: first ? first.title : t("summary.nextPlan") })));
     const tile = (key, value) => h("div", { class: `stat-tile tone-${key}` },
       h("div", { class: "stat-label" }, icon(VERDICT_STYLE[key].icon), t(`summary.stat.${key}`)),
       h("div", { class: "stat-value" }, String(value)));

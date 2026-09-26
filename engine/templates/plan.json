@@ -4,35 +4,43 @@
   "id": "",
   "title": "",
   "subtitle": "",
-  "lang": "en",
+  "lang": "fr",
   "accent": "neutral",
   "source": { "kind": "request" },
-  "context": "The request in two or three sentences, the scope, what already exists.",
+  "context": "La demande en deux ou trois phrases, le périmètre, ce qui existe déjà.",
   "phases": [
-    { "id": "p1", "title": "First phase", "estimate": "≈ 1 d", "days": 1 }
+    { "id": "p1", "title": "Première phase", "estimate": "≈ 1 j", "days": 1 }
   ],
   "glossary": [],
   "pages": [
     {
       "id": "theme-1",
-      "section": "1 · First theme",
-      "title": "Page title",
-      "intro": "What this page asks you to decide, in one sentence.",
+      "section": "1 · Premier thème",
+      "title": "Titre de la page",
+      "intro": "Ce que cette page te demande de trancher, en une phrase.",
       "decisions": [
         {
           "id": "D1",
-          "title": "A decision that can be settled on its own",
+          "title": "Une décision qui se tranche seule",
           "importance": "important",
           "phase": "p1",
-          "why": "Why it matters: the context, and what a mistake would cost.",
-          "proposal": "What is proposed, in plain words.",
+          "why": "Pourquoi ça compte : le contexte, et ce que coûterait une erreur.",
+          "proposal": "Ce qui est proposé, en mots simples.",
+          "visual": {
+            "kind": "diagram",
+            "nodes": [
+              { "id": "avant", "label": "Aujourd'hui", "col": 0, "row": 0, "tone": "muted" },
+              { "id": "apres", "label": "Après la décision", "col": 1, "row": 0, "tone": "success" }
+            ],
+            "edges": [{ "from": "avant", "to": "apres" }]
+          },
           "tasks": [
             {
               "id": "t1",
-              "title": "First task",
-              "do": "What to do, concretely.",
+              "title": "Première tâche",
+              "do": "Ce qu'il faut faire, concrètement.",
               "files": [{ "path": "src/example.js", "op": "create" }],
-              "acceptance": ["A verifiable criterion"],
+              "acceptance": ["Un critère vérifiable"],
               "verify": ["npm test"]
             }
           ]

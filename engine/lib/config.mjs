@@ -8,10 +8,13 @@ import { httpError, isInside } from "./fsutil.mjs";
 export const PLAN_ID = /^[a-z0-9][a-z0-9_-]*$/;
 export const LANGS = ["fr", "en"];
 export const ACCENTS = ["neutral", "blue", "green", "orange", "rose", "violet", "yellow"];
+// Where plans lived before `docs/fluidplan`: a project that already has `.fluidplan/` (and no
+// `docs/fluidplan/`) keeps using it, so no existing plan is lost.
+export const LEGACY_PLANS_DIR = ".fluidplan";
 export const DEFAULTS = {
-  plansDir: ".fluidplan",
+  plansDir: "docs/fluidplan",
   outputDir: "{plansDir}/{id}",
-  lang: "en",
+  lang: "fr",
   accent: "neutral",
   port: 5178,
 };
@@ -31,7 +34,7 @@ export function resolveConfig(options = {}) {
   return {
     root,
     file: existsSync(file) ? file : null,
-    plansDir: path.resolve(root, options.plans ?? merged.plansDir),
+    plansDir: path.resolve(root, options.plans ?? fromFile.plansDir ?? defaultPlansDir(root)),
     outputDir: String(merged.outputDir),
     lang: LANGS.includes(merged.lang) ? merged.lang : DEFAULTS.lang,
     accent: ACCENTS.includes(merged.accent) ? merged.accent : DEFAULTS.accent,
@@ -39,6 +42,11 @@ export function resolveConfig(options = {}) {
     // Cap on generated illustrations, per service and per plan: 5 at most (see lib/images.mjs).
     imagesPerProvider: merged.imagesPerProvider,
   };
+}
+
+function defaultPlansDir(root) {
+  const legacy = path.join(root, LEGACY_PLANS_DIR);
+  return existsSync(legacy) && !existsSync(path.join(root, DEFAULTS.plansDir)) ? LEGACY_PLANS_DIR : DEFAULTS.plansDir;
 }
 
 export function planDir(config, id) {

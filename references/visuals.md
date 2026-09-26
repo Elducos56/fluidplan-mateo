@@ -5,6 +5,11 @@ A visual goes on a page (`page.visual`, in a card at the top) or on a decision
 mechanism, a timeline that shows the sequence, a comparison that shows what is given up. When the
 information is a number, use `stats`, not a chart.
 
+**By default, every critical or important decision carries a visual** (`check` warns otherwise),
+and the answer to an "Explain" adds one when a mechanism is at stake: many people understand a
+diagram before they understand a paragraph. Built-in visuals cost nothing to add; the paid
+illustrations below stay optional.
+
 All visuals follow the theme (light / dark) and the design tokens: never write a color in a plan.
 
 ## Built-in visuals
@@ -28,7 +33,7 @@ All visuals follow the theme (light / dark) and the design tokens: never write a
 | `image` | a screenshot, a mockup | `src`, `alt`, `caption` |
 
 `icon` (in `overview`, `cards`, `icons`, `tiers`, `matrix`, and on an `items` entry): a plan file
-(`assets/…`, copied and downscaled into `.fluidplan/<id>/assets/`) or `lucide:<name>` (list below,
+(`assets/…`, copied and downscaled into `docs/fluidplan/<id>/assets/`) or `lucide:<name>` (list below,
 "Icons"; `check` rejects an unknown name).
 
 `tone` of a diagram node: `default`, `primary` (the heart of the matter), `muted` (existing, out of
@@ -60,7 +65,7 @@ For a readable diagram:
 ## Writing an extension (plan-specific visual)
 
 When no built-in visual shows the mechanism (a computed progression curve, a talent tree, a
-calendar), write a module in `.fluidplan/<id>/visuals/<name>.js` and declare it:
+calendar), write a module in `docs/fluidplan/<id>/visuals/<name>.js` and declare it:
 `"extensions": ["visuals/<name>.js"]`.
 
 ```js
@@ -146,7 +151,7 @@ generate it rather than describe it. Never for decoration: a plan stays a plan.
 **Generate**: the person clicks "Illustrate" on the visual and picks the service; or Claude, with
 their consent, runs `fluidplan images generate --plan <id> --target page:<id> --provider <service>`
 (`--target decision:<id>` for a decision's visual; `--prompt`, `--aspect`, `--transparent` to change
-the request). The image goes into `.fluidplan/<id>/assets/generated/` and the latest one is
+the request). The image goes into `docs/fluidplan/<id>/assets/generated/` and the latest one is
 selected; the other versions stay selectable under the image (`images select` from the CLI).
 
 | Service | Key (`engine/.env`) | Default model | Optional settings |
@@ -160,7 +165,7 @@ Choosing: Gemini or OpenAI for a mockup or an illustrated diagram; Ludo for a ga
 icon, background); Meshy for a character or object concept meant for 3D.
 
 **Limit**: at most 5 generations **per service per plan**, counted in
-`.fluidplan/<id>/images.json`. An attempt counts as soon as the service has accepted it, even if it
+`docs/fluidplan/<id>/images.json`. An attempt counts as soon as the service has accepted it, even if it
 fails afterwards; a request refused outright (invalid key, rejected parameter) is not counted.
 `fluidplan.config.json` can lower the limit (`"imagesPerProvider": 2`, `0` to turn generation off),
 not raise it. `fluidplan images` shows the usage.

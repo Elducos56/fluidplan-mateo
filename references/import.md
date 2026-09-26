@@ -6,7 +6,7 @@
 |---|---|---|
 | `.md`, `.txt` | the Read tool | directly |
 | `.pdf` | the Read tool, in chunks: `pages: "1-20"`, then `"21-40"`… | page images are visible; transcribe tables by hand |
-| `.docx` | `node <skill>/engine/fluidplan.mjs import <file.docx> --out .fluidplan/<id>/source` | writes `source.md` and `media/`; then read `source.md` |
+| `.docx` | `node <skill>/engine/fluidplan.mjs import <file.docx> --out docs/fluidplan/<id>/source` | writes `source.md` and `media/`; then read `source.md` |
 | `.docx` (fallback) | the command falls back to `pandoc` if it is installed | if both fail: ask for a .md or .pdf export |
 | a request in the conversation | the conversation + exploring the code | see `authoring.md` § 8 |
 
@@ -22,7 +22,7 @@ source when in doubt.
 - Leave the original document where it is; record its path in `source.path` (relative to the
   project root) and its format in `source.kind`.
 - Useful images (screenshots, diagrams, project icons) are copied **and downscaled** into
-  `.fluidplan/<id>/assets/`; reference them as `assets/<name>`.
+  `docs/fluidplan/<id>/assets/`; reference them as `assets/<name>`.
 - `source_ref` on every decision: the section or page it comes from.
 
 ## From text to decisions

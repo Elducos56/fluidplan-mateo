@@ -22,7 +22,7 @@
   },
   "scripts": {
     "check": "node engine/fluidplan.mjs check --root examples/tech-feature && node engine/fluidplan.mjs check --plans test/fixtures/plans",
-    "test": "npm run unit && node test/smoke.mjs",
+    "test": "npm run unit && node test/smoke.mjs && node test/smoke_mateo.mjs",
     "unit": "node --test \"test/unit/*.test.mjs\"",
     "smoke": "node test/smoke.mjs",
     "screenshots": "node scripts/readme-screenshots.mjs"

@@ -46,24 +46,32 @@ export function serverInfoPath(config) {
   return path.join(os.tmpdir(), "fluidplan", `server-${key}.json`);
 }
 
+// The Host headers the server answers to: the loopback, and the Tailscale address when `serve
+// --tailscale` asked for it. Anything else is refused (DNS rebinding).
+export function allowedHosts(port, extraHost) {
+  return new Set([`${HOST}:${port}`, `localhost:${port}`, ...(extraHost ? [`${extraHost}:${port}`] : [])]);
+}
+
 // Starts the server; tries the next ports if the first one is taken. Resolves { server, port, url }.
+// extraHost: a second address to listen on (the machine's Tailscale address), off by default.
 // register: write .server.json so that `serve` reuses the instance; `snap` skips it so as not to
 // hide a server the person already started.
-export async function startServer(config, { plan: defaultPlan, quiet = false, register = true } = {}) {
+export async function startServer(config, { plan: defaultPlan, quiet = false, register = true, extraHost = null } = {}) {
   const env = providerEnv();
   let port = config.port;
-  const server = http.createServer((req, res) => {
+  const listener = (req, res) => {
     handle(req, res).catch((error) => {
       const status = error.status ?? 500;
       if (status >= 500) console.error(error);
       if (!res.headersSent) sendJson(res, status, { error: error.message });
       else res.end();
     });
-  });
+  };
+  const server = http.createServer(listener);
 
   async function handle(req, res) {
     const host = String(req.headers.host ?? "");
-    if (host !== `${HOST}:${port}` && host !== `localhost:${port}`) throw httpError(421, "host rejected");
+    if (!allowedHosts(port, extraHost).has(host)) throw httpError(421, "host rejected");
     const url = new URL(req.url, `http://${HOST}:${port}`);
     const pathname = decodeURIComponent(url.pathname);
     if (pathname.startsWith("/api/")) return api(req, res, url, pathname);
@@ -77,7 +85,7 @@ export async function startServer(config, { plan: defaultPlan, quiet = false, re
 
   async function api(req, res, url, pathname) {
     // Writes: same origin only, so that a page opened elsewhere cannot post anything.
-    if (req.method !== "GET" && req.headers.origin && req.headers.origin !== `http://${HOST}:${port}` && req.headers.origin !== `http://localhost:${port}`) {
+    if (req.method !== "GET" && req.headers.origin && ![...allowedHosts(port, extraHost)].some((allowed) => req.headers.origin === `http://${allowed}`)) {
       throw httpError(403, "origin rejected");
     }
     const id = url.searchParams.get("id") ?? defaultPlan ?? (await listPlans(config))[0]?.id;
@@ -188,7 +196,22 @@ export async function startServer(config, { plan: defaultPlan, quiet = false, re
     }
   }
 
-  const url = `http://${HOST}:${port}/${defaultPlan ? `?plan=${encodeURIComponent(defaultPlan)}` : ""}`;
+  // Second address (Tailscale), same port and same handler. The loopback server stays the main one.
+  let extraServer = null;
+  if (extraHost) {
+    extraServer = http.createServer(listener);
+    await new Promise((resolve, reject) => {
+      extraServer.once("error", reject);
+      extraServer.listen(port, extraHost, () => {
+        extraServer.off("error", reject);
+        resolve();
+      });
+    });
+    server.on("close", () => extraServer.close());
+  }
+
+  const query = defaultPlan ? `?plan=${encodeURIComponent(defaultPlan)}` : "";
+  const url = `http://${HOST}:${port}/${query}`;
   if (register) {
     await writeJson(serverInfoPath(config), { port, pid: process.pid, root: config.root, plansDir: config.plansDir, started_at: new Date().toISOString() });
   }
@@ -208,7 +231,9 @@ export async function startServer(config, { plan: defaultPlan, quiet = false, re
     });
   }
   if (!quiet) console.log(`fluidplan: ${url}  (plans: ${config.plansDir})`);
-  return { server, port, url };
+  const remoteUrl = extraHost ? `http://${extraHost}:${port}/${query}` : null;
+  if (!quiet && remoteUrl) console.log(`on your phone (Tailscale): ${remoteUrl}`);
+  return { server, port, url, remoteUrl };
 }
 
 async function sendFile(res, file) {

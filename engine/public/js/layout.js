@@ -5,13 +5,15 @@ import { h } from "./dom.js";
 import { glossaryList } from "./glossary.js";
 import { formatTime } from "./i18n.js";
 import { icon } from "./icons.js";
-import { counts, readiness, SUMMARY_PAGE } from "./model.js";
+import { allDecisions, counts, readiness, remainingMinutes, SUMMARY_PAGE } from "./model.js";
 import { PAGE_STATE_ICON, renderHome, renderPage } from "./page.js";
 import { renderSummary } from "./summary.js";
 import { alert, badge, button, dialog, floating, progress, sheet, toast } from "./ui.js";
 
 const HOME_PAGE = "_home";
 const THEME_KEY = "fluidplan:theme";
+const lastCardKey = (planId) => `fluidplan:last-card:${planId}`;
+const VERDICT_KEYS = { 1: "ok", 2: "ko", 3: "modify", 4: "explain" };
 
 export function renderApp(ctx, { api }) {
   const { plan, store, t } = ctx;
@@ -57,6 +59,9 @@ export function renderApp(ctx, { api }) {
   const glossarySheet = sheet({ title: t("glossary.title"), side: "right", closeLabel: t("common.close") });
   const themeButton = button({ icon: "monitor", variant: "ghost", size: "sm", title: t("theme.toggle"), onclick: cycleTheme });
   const submitButton = button({ label: t("submit.button"), icon: "send", size: "sm", className: "submit-button", onclick: submit });
+  const acceptButton = button({ label: t("accept.button"), icon: "check", variant: "outline", size: "sm", className: "accept-button", title: t("accept.hint"), onclick: acceptRecommended });
+  const remainingText = h("span");
+  const remaining = h("span", { class: "badge badge-outline remaining-badge", title: t("decision.minutesTitle") }, icon("timer"), remainingText);
   const topbar = h("header", { class: "topbar" },
     button({ icon: "menu", variant: "ghost", size: "sm", title: t("nav.open"), className: "menu-button", onclick: () => mobileNav.open(buildNav()) }),
     crumbs,
@@ -65,6 +70,8 @@ export function renderApp(ctx, { api }) {
       badge(t("round.label", { n: ctx.state.round }), { variant: "outline", icon: "history", className: "round-badge" }),
       plan.glossary?.length ? button({ icon: "book-open", variant: "ghost", size: "sm", title: t("glossary.title"), onclick: () => glossarySheet.open(glossaryList(plan.glossary, t)) }) : null,
       themeButton,
+      remaining,
+      acceptButton,
       submitButton));
 
   const banners = h("div", { class: "banners" });
@@ -191,6 +198,7 @@ export function renderApp(ctx, { api }) {
         actions: [button({ label: t("filter.todo"), icon: "list-filter", variant: "outline", size: "sm", onclick: () => { ctx.setFilter("todo"); current = null; route(); } })],
       }));
     }
+    if (resume) list.push(resume);
     banners.replaceChildren(...list);
     banners.querySelector(".alert-info > .icon-loader-circle")?.classList.add("spin");
   }
@@ -236,9 +244,34 @@ export function renderApp(ctx, { api }) {
     });
   }
 
+  // --- everything as recommended -------------------------------------------------------------------------
+  function acceptRecommended() {
+    if (ctx.readOnly()) return;
+    const { accept, critical } = store.recommendable();
+    if (!accept.length) return;
+    dialog({
+      title: t("accept.title"),
+      description: [t("accept.text", { count: accept.length }), critical.length ? t("accept.critical", { count: critical.length }) : ""].filter(Boolean).join(" "),
+      closeLabel: t("common.close"),
+      actions: ({ close }) => [
+        button({ label: t("common.cancel"), variant: "outline", onclick: close }),
+        button({
+          label: t("accept.confirm"),
+          icon: "check",
+          onclick: () => {
+            const done = store.acceptRecommended();
+            close();
+            toast(t("accept.done", { count: done.length }), { variant: "success" });
+          },
+        }),
+      ],
+    });
+  }
+
   function applyState() {
     store.readOnly = ctx.state.status !== "review";
     submitButton.disabled = store.readOnly || ctx.check.errors.length > 0;
+    acceptButton.hidden = store.readOnly || !store.recommendable().accept.length;
     renderBanners();
     current?.update?.();
   }
@@ -253,7 +286,11 @@ export function renderApp(ctx, { api }) {
       { tone: "explain", value: c.explain },
       { tone: "ko", value: c.ko },
     ]);
-    sideCount.textContent = t("nav.progress", { done: c.all - c.pending, total: c.all });
+    const minutes = remainingMinutes(plan, store.answers);
+    sideCount.textContent = [t("nav.progress", { done: c.all - c.pending, total: c.all }), minutes ? t("nav.remaining", { n: minutes }) : ""].filter(Boolean).join(" · ");
+    remaining.hidden = !minutes;
+    remainingText.textContent = t("nav.remaining", { n: minutes });
+    acceptButton.hidden = store.readOnly || !store.recommendable().accept.length;
     for (const { stateIcon, count, extra } of navLinks.values()) {
       if (!extra?.page) continue;
       const state = store.pageState(extra.page);
@@ -264,7 +301,14 @@ export function renderApp(ctx, { api }) {
     }
   }
 
-  store.subscribe(() => {
+  store.subscribe((id) => {
+    if (id) {
+      try {
+        localStorage.setItem(lastCardKey(ctx.planId), id);
+      } catch {
+        /* private browsing: no resume banner, nothing else changes */
+      }
+    }
     refreshChrome();
     current?.update?.();
   });
@@ -275,7 +319,75 @@ export function renderApp(ctx, { api }) {
     if (event.target.closest?.("input, textarea, select, [contenteditable], dialog, [role=group], [role=tablist], [role=radiogroup], .order")) return;
     if (event.key === "ArrowRight") step(1);
     if (event.key === "ArrowLeft") step(-1);
+    // 1 to 4: the verdict of the active card (the one under the mouse, otherwise the first card
+    // without an answer on screen). N: the next card without an answer.
+    if (VERDICT_KEYS[event.key] && !event.shiftKey) {
+      const card = activeCard();
+      const toggle = card?.querySelector(`:scope > .card-footer .toggle.tone-${VERDICT_KEYS[event.key]}`);
+      if (toggle && !toggle.disabled) {
+        event.preventDefault();
+        toggle.click();
+      }
+    }
+    if (event.key === "n" || event.key === "N") {
+      event.preventDefault();
+      nextPending();
+    }
   });
+
+  let hovered = null;
+  main.addEventListener("mouseover", (event) => { hovered = event.target.closest?.("section.decision") ?? hovered; });
+  main.addEventListener("mouseleave", () => { hovered = null; });
+
+  function activeCard() {
+    if (hovered?.isConnected && !hovered.hidden) return hovered;
+    const cards = [...main.querySelectorAll("section.decision")].filter((c) => !c.hidden && c.offsetParent !== null);
+    const onScreen = cards.filter((c) => {
+      const box = c.getBoundingClientRect();
+      return box.bottom > 0 && box.top < window.innerHeight;
+    });
+    return onScreen.find((c) => c.dataset.status === "pending") ?? onScreen[0] ?? null;
+  }
+
+  // The next card without an answer: after the active one on this page, otherwise on the next
+  // page that has one.
+  function nextPending() {
+    const cards = [...main.querySelectorAll("section.decision")].filter((c) => !c.hidden);
+    const from = cards.indexOf(activeCard());
+    const here = cards.slice(from + 1).find((c) => c.dataset.status === "pending") ?? (from === -1 ? cards.find((c) => c.dataset.status === "pending") : null);
+    if (here) {
+      hovered = here;
+      ctx.go(current.page.id, here.id);
+      return;
+    }
+    const entry = allDecisions(plan).find(({ page, decision }) => page.id !== current?.page.id && store.verdict(decision.id) === "pending");
+    if (entry) ctx.go(entry.page.id, `d-${entry.decision.id}`);
+  }
+
+  // --- resume after a break ------------------------------------------------------------------------------
+  // The answers are already saved; what a break loses is the place. On opening, if cards are
+  // still without an answer, a banner names the last card touched and goes back to it.
+  let resume = null;
+  if (ctx.state.status === "review") {
+    let lastId = null;
+    try {
+      lastId = localStorage.getItem(lastCardKey(ctx.planId));
+    } catch {
+      lastId = null;
+    }
+    const entry = lastId ? allDecisions(plan).find(({ decision }) => decision.id === lastId) : null;
+    const pending = counts(plan, store.answers).pending;
+    if (entry && pending) {
+      resume = alert({
+        variant: "info",
+        icon: "history",
+        title: t("resume.title", { id: entry.decision.id, title: entry.decision.title }),
+        description: t("resume.text", { count: pending, minutes: remainingMinutes(plan, store.answers) }),
+        className: "resume-banner",
+        actions: [button({ label: t("resume.button"), icon: "arrow-right", size: "sm", onclick: () => { resume?.remove(); resume = null; ctx.go(entry.page.id, `d-${entry.decision.id}`); } })],
+      });
+    }
+  }
 
   refreshChrome();
   applyState();

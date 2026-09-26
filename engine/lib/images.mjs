@@ -23,9 +23,14 @@ const queues = new Map();
 
 // FLUIDPLAN_ENV_FILE points at another key file; "none" ignores engine/.env, so tests and
 // screenshots do not depend on the keys configured on the machine.
+// A service key is taken from engine/.env only: a key that happens to sit in the machine's
+// environment (OPENAI_API_KEY set for another tool) must not turn paid illustrations on by
+// accident. FLUIDPLAN_IMAGES_FROM_ENV=1 accepts environment keys explicitly.
 export function providerEnv() {
   const file = process.env.FLUIDPLAN_ENV_FILE ?? path.join(ENGINE, ".env");
-  return { ...(file === "none" ? {} : loadEnv(file)), ...process.env };
+  const fromEnv = { ...process.env };
+  if (process.env.FLUIDPLAN_IMAGES_FROM_ENV !== "1") for (const p of PROVIDERS) delete fromEnv[p.env];
+  return { ...(file === "none" ? {} : loadEnv(file)), ...fromEnv };
 }
 
 // The cap is 5; fluidplan.config.json can lower it ("imagesPerProvider", 0 to turn generation off),

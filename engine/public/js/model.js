@@ -84,6 +84,39 @@ export function counts(plan, answers) {
   return total;
 }
 
+// Reading time of a card: the words of "why", the proposal and the options at 200 words per minute,
+// plus 20 seconds per option or item to weigh. An estimate, so the person knows whether they have
+// the time before starting.
+const WORDS_PER_MINUTE = 200;
+const SECONDS_PER_OPTION = 20;
+
+export function readingSeconds(decision) {
+  const options = decision.control?.options ?? [];
+  const items = decision.items ?? [];
+  const texts = [
+    decision.why,
+    decision.proposal,
+    ...options.flatMap((o) => [o.label, o.detail, ...(o.pros ?? []), ...(o.cons ?? [])]),
+    ...items.flatMap((i) => [i.title, i.detail]),
+  ];
+  const words = texts.filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
+  return Math.round((words / WORDS_PER_MINUTE) * 60 + (options.length + items.length) * SECONDS_PER_OPTION);
+}
+
+// Rounded to the minute, never below one.
+export function readingMinutes(decision) {
+  return Math.max(1, Math.round(readingSeconds(decision) / 60));
+}
+
+// Time left: the reading minutes of every card still without an answer.
+export function remainingMinutes(plan, answers) {
+  let minutes = 0;
+  for (const { decision } of allDecisions(plan)) {
+    if (verdict(decision, answers?.[decision.id]) === "pending") minutes += readingMinutes(decision);
+  }
+  return minutes;
+}
+
 // Ready to export: everything is decided and nothing is waiting for a revision.
 export function readiness(plan, answers) {
   const pending = [];

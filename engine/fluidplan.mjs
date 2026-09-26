@@ -17,6 +17,7 @@ import { generateForPlan, imagesState, MAX_PER_PROVIDER, selectImage } from "./l
 import { listPlans, loadState } from "./lib/plans.mjs";
 import { buildDigest, finalize, nextRound } from "./lib/rounds.mjs";
 import { serverInfoPath, startServer } from "./server.mjs";
+import { tailscaleIp } from "./lib/tailscale.mjs";
 
 const ENGINE = path.dirname(fileURLToPath(import.meta.url));
 const HELP = `fluidplan — a plan to decide, presented as a small local app.
@@ -25,6 +26,7 @@ Usage: node ${toPosix(path.relative(process.cwd(), path.join(ENGINE, "fluidplan.
 
 Commands
   serve [--open] [--port n]        serve the page (reuses an instance already running for this project)
+        [--tailscale]              also listen on this machine's Tailscale address (100.x), to open the plan on a phone
   check                            errors (exit code 1) and warnings, for every plan or --plan
   new --plan <id> --title "…"      create .fluidplan/<id>/plan.json from the template [--lang en|fr]
   wait                             wait until the person sends the round, then print the digest
@@ -122,10 +124,13 @@ async function serve(config) {
   if (reused) {
     const url = `http://127.0.0.1:${reused.port}/${plan ? `?plan=${encodeURIComponent(plan)}` : ""}`;
     console.log(`fluidplan is already running for this project: ${url}`);
+    if (args.tailscale) console.log("--tailscale ignored: stop the running server first to relaunch it with Tailscale");
     if (args.open) openBrowser(url);
     return 0;
   }
-  const { url } = await startServer(config, { plan });
+  // Off by default: without --tailscale the server listens on 127.0.0.1 only.
+  const extraHost = args.tailscale ? tailscaleIp() : null;
+  const { url } = await startServer(config, { plan, extraHost });
   if (args.open) openBrowser(url);
   // The process stays alive: it is the server.
   return undefined;
@@ -189,7 +194,28 @@ async function create(config) {
   template.$schema = toPosix(path.relative(dir, path.join(ENGINE, "schema", "plan.schema.json")));
   await writeJson(path.join(dir, "plan.json"), template);
   console.log(`created: ${toPosix(path.relative(config.root, path.join(dir, "plan.json")))}`);
+  const ignored = await ignorePlanState(config);
+  if (ignored.length) console.log(`.gitignore: added ${ignored.join(", ")}`);
   return 0;
+}
+
+// The page's answers, the engine's state and the round archives are working files: in a git
+// repository, `new` keeps them out of commits (the plan itself stays versioned).
+async function ignorePlanState(config) {
+  if (!existsSync(path.join(config.root, ".git"))) return [];
+  const relative = toPosix(path.relative(config.root, config.plansDir));
+  if (!relative || relative.startsWith("..")) return [];
+  const lines = ["answers.json", "state.json", "rounds/", "images.json"].map((name) => `${relative}/*/${name}`);
+  const file = path.join(config.root, ".gitignore");
+  const current = existsSync(file) ? await readFile(file, "utf8") : "";
+  const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+  if (present.has(`${relative}/`) || present.has(relative)) return [];
+  const missing = lines.filter((line) => !present.has(line));
+  if (!missing.length) return [];
+  const prefix = current && !current.endsWith("\n") ? "\n" : "";
+  const block = ["# fluidplan: working files of the plans", ...missing].join("\n");
+  await writeAtomic(file, `${current}${prefix}${block}\n`);
+  return missing;
 }
 
 // --- wait -----------------------------------------------------------------------------------------
